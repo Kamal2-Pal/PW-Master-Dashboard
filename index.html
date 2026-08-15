@@ -66,6 +66,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 </div>
 
 <main class="wrap">
+<section id="ordersTab" class="tab-panel active-panel">
  <div class="kpis" id="kpis"></div>
 
  <div class="filters">
@@ -90,6 +91,50 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
    <div class="note" id="rowNote"></div>
    <div class="table-wrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
  </section>
+</section>
+
+
+<section id="slaTab" class="tab-panel">
+  <div class="sla-head">
+    <div>
+      <h2>48H SLA Dashboard</h2>
+      <div class="note">SLA basis: <b>Order create date → Actual_ShipDate</b>. Target = 48 hours. Cancelled orders are excluded.</div>
+    </div>
+    <div class="sla-target">Target <b>48 Hours</b></div>
+  </div>
+
+  <div class="kpis sla-kpis" id="slaKpis"></div>
+
+  <div class="filters">
+    <div class="field">Warehouse<select id="slaWarehouse"><option value="">All Warehouses</option></select></div>
+    <div class="field">Finance Category<select id="slaChannel"><option value="">All Finance Categories</option></select></div>
+    <div class="field">SLA Status<select id="slaStatus"><option value="">All SLA Status</option></select></div>
+    <div class="field">From Date<input id="slaFrom" type="date"></div>
+    <div class="field">To Date<input id="slaTo" type="date"></div>
+    <button onclick="clearSlaFilters()">Clear SLA Filters</button>
+  </div>
+
+  <div class="grid">
+    <section class="card"><div class="section-title">SLA Status</div><div id="slaStatusChart" class="hbars"></div></section>
+    <section class="card"><div class="section-title">Warehouse SLA Performance</div><div id="slaWarehouseChart" class="hbars"></div></section>
+    <section class="card"><div class="section-title">Daily SLA %</div><div id="slaDayChart" class="chart"></div></section>
+    <section class="card">
+      <div class="section-title">SLA Rules</div>
+      <div class="sla-rules">
+        <div><span class="dot green-dot"></span><b>Within SLA</b> — shipped in ≤ 48 hours</div>
+        <div><span class="dot red-dot"></span><b>Breached</b> — shipped after 48 hours or still open after 48 hours</div>
+        <div><span class="dot amber-dot"></span><b>At Risk</b> — open and due within the next 6 hours</div>
+      </div>
+    </section>
+  </div>
+
+  <section class="table-card">
+    <div class="section-title">48H SLA Order Details</div>
+    <div class="note" id="slaNote"></div>
+    <div class="table-wrap"><table><thead id="slaThead"></thead><tbody id="slaTbody"></tbody></table></div>
+  </section>
+</section>
+
 </main>
 
 <script>
@@ -135,10 +180,10 @@ function applyFilters() {
   const f=document.getElementById("fromDate").value, t=document.getElementById("toDate").value;
   current=raw.filter(r=>{
     if(w && String(get(r,["FulfillmentLocationName"]))!==w) return false;
-    if(c && String(get(r,["finance_category","Finance Category"]))!==c) return false;
+    if(c && String(get(r,["Sales Channel"]))!==c) return false;
     if(s && String(get(r,["Status"]))!==s) return false;
     if(o && String(get(r,["Order Type"]))!==o) return false;
-    const d=String(get(r,["Order create date"])).slice(0,10);
+    const d=String(get(r,["OrderDate"])).slice(0,10);
     if(f && d<f) return false;
     if(t && d>t) return false;
     return true;
@@ -161,7 +206,7 @@ function hbar(id,title,data) {
 
 function dayChart(rows) {
   const m={};
-  rows.forEach(r=>{const d=String(get(r,["Order create date"])).slice(0,10); if(d) m[d]=(m[d]||0)+1;});
+  rows.forEach(r=>{const d=String(get(r,["OrderDate"])).slice(0,10); if(d) m[d]=(m[d]||0)+1;});
   const a=Object.entries(m).sort((x,y)=>x[0].localeCompare(y[0])).slice(-14);
   const max=Math.max(...a.map(x=>x[1]),1);
   document.getElementById("dayChart").innerHTML=a.length?a.map(([d,v])=>`<div class="bar"><em>${v}</em><i style="height:${Math.max(2,v/max*190)}px"></i><span>${esc(d.slice(5))}</span></div>`).join(""):"<div class='note'>No data</div>";
@@ -228,66 +273,74 @@ populateFilters(); render();
 
 let slaCurrent = [];
 
-function parseDate(v){
-  if(!v) return null;
-  const d = new Date(String(v).replace(/\./g,'-'));
+function parseSlaDate(v){
+  if(v === null || v === undefined || v === "") return null;
+  const d = new Date(String(v).trim().replace(/\./g,""));
   return isNaN(d.getTime()) ? null : d;
 }
-function slaRows(){
+
+function buildSlaRows(){
   const now = new Date();
   const orders = orderLevel(raw);
-  return orders.filter(r => String(get(r,["Status"])).toLowerCase() !== "cancelled").map(r => {
-    const orderDate = parseDate(get(r,["Order create date"]));
-    const shipDate = parseDate(get(r,["Actual_ShipDate","Actual_ShipDate "]));
-    if(!orderDate) return {...r, _sla:"No Order Date", _hours:null, _due:null, _age:null};
-    const due = new Date(orderDate.getTime()+48*3600000);
-    const end = shipDate || now;
-    const hours = (end-orderDate)/3600000;
-    let status = "";
-    if(shipDate){
-      status = hours <= 48 ? "Within SLA" : "Breached";
-    } else {
-      status = hours > 48 ? "Breached" : (hours >= 42 ? "At Risk" : "Open");
-    }
-    return {...r,_sla:status,_hours:hours,_due:due,_age:hours};
-  }).filter(r=>r._sla!=="No Order Date");
+  return orders
+    .filter(r => String(get(r,["Status"])).toLowerCase() !== "cancelled")
+    .map(r => {
+      const orderDate = parseSlaDate(get(r,["Order create date"]));
+      const shipDate = parseSlaDate(get(r,["Actual_ShipDate","Actual_ShipDate "]));
+      if(!orderDate) return {...r,_sla:"No Order Create Date",_hours:null,_due:null};
+      const due = new Date(orderDate.getTime() + 48*3600000);
+      const end = shipDate || now;
+      const hours = (end - orderDate)/3600000;
+      let status;
+      if(shipDate) status = hours <= 48 ? "Within SLA" : "Breached";
+      else status = hours > 48 ? "Breached" : (hours >= 42 ? "At Risk" : "Open");
+      return {...r,_sla:status,_hours:hours,_due:due};
+    })
+    .filter(r => r._sla !== "No Order Create Date");
 }
-function slaFillSelect(id, values, label){
-  const el=document.getElementById(id), old=el.value;
-  const vals=unique(values);
+
+function initSlaFilters(){
+  const rows=buildSlaRows();
+  slaFill("slaWarehouse",rows.map(r=>get(r,["FulfillmentLocationName"])),"All Warehouses");
+  slaFill("slaChannel",rows.map(r=>get(r,["finance_category","Finance Category"])),"All Finance Categories");
+  slaFill("slaStatus",rows.map(r=>r._sla),"All SLA Status");
+}
+
+function slaFill(id,values,label){
+  const el=document.getElementById(id), old=el.value, vals=unique(values);
   el.innerHTML=`<option value="">${label}</option>`+vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
   if(vals.includes(old)) el.value=old;
 }
+
 function applySlaFilters(){
   const w=document.getElementById("slaWarehouse").value;
   const c=document.getElementById("slaChannel").value;
   const s=document.getElementById("slaStatus").value;
-  const f=document.getElementById("slaFrom").value, t=document.getElementById("slaTo").value;
-  slaCurrent=slaRows().filter(r=>{
+  const f=document.getElementById("slaFrom").value;
+  const t=document.getElementById("slaTo").value;
+
+  slaCurrent=buildSlaRows().filter(r=>{
     if(w && String(get(r,["FulfillmentLocationName"]))!==w) return false;
     if(c && String(get(r,["finance_category","Finance Category"]))!==c) return false;
     if(s && r._sla!==s) return false;
     const d=String(get(r,["Order create date"])).slice(0,10);
-    if(f && d<f) return false; if(t && d>t) return false;
+    if(f && d<f) return false;
+    if(t && d>t) return false;
     return true;
   });
   renderSla();
 }
-function initSlaFilters(){
-  const rows=slaRows();
-  slaFillSelect("slaWarehouse",rows.map(r=>get(r,["FulfillmentLocationName"])),"All Warehouses");
-  slaFillSelect("slaChannel",rows.map(r=>get(r,["finance_category","Finance Category"])),"All Finance Categories");
-  slaFillSelect("slaStatus",rows.map(r=>r._sla),"All SLA Status");
-}
+
 function renderSla(){
-  const rows=slaCurrent, total=rows.length;
+  const rows=slaCurrent;
+  const total=rows.length;
   const within=rows.filter(r=>r._sla==="Within SLA").length;
   const breached=rows.filter(r=>r._sla==="Breached").length;
   const risk=rows.filter(r=>r._sla==="At Risk").length;
   const open=rows.filter(r=>r._sla==="Open").length;
   const measured=within+breached;
   const pct=measured ? within/measured*100 : 0;
-  const avg=rows.length ? rows.reduce((s,r)=>s+r._hours,0)/rows.length : 0;
+
   const cards=[
     ["SLA Orders",total,""],
     ["Within SLA",within,"sla-kpi-good"],
@@ -296,7 +349,8 @@ function renderSla(){
     ["At Risk",risk,"sla-kpi-risk"],
     ["Open < 48H",open,""]
   ];
-  document.getElementById("slaKpis").innerHTML=cards.map(([k,v,cl])=>`<div class="kpi ${cl}"><small>${k}</small><strong>${typeof v==="number"?v.toLocaleString():v}</strong></div>`).join("");
+  document.getElementById("slaKpis").innerHTML=cards.map(([k,v,cl])=>
+    `<div class="kpi ${cl}"><small>${k}</small><strong>${typeof v==="number"?v.toLocaleString():v}</strong></div>`).join("");
 
   const statusData={};
   rows.forEach(r=>statusData[r._sla]=(statusData[r._sla]||0)+1);
@@ -312,40 +366,55 @@ function renderSla(){
     if(r._sla==="Within SLA")daily[d].ok++;
   });
   const days=Object.entries(daily).sort((a,b)=>a[0].localeCompare(b[0])).slice(-14);
-  const max=100;
-  document.getElementById("slaDayChart").innerHTML=days.length?days.map(([d,x])=>{
-    const p=x.total?x.ok/x.total*100:0;
-    return `<div class="bar"><em>${p.toFixed(0)}%</em><i style="height:${Math.max(2,p/max*190)}px"></i><span>${esc(d.slice(5))}</span></div>`;
-  }).join(""):"<div class='note'>No data</div>";
+  document.getElementById("slaDayChart").innerHTML=days.length ? days.map(([d,x])=>{
+    const p=x.total ? x.ok/x.total*100 : 0;
+    return `<div class="bar"><em>${p.toFixed(0)}%</em><i style="height:${Math.max(2,p/100*190)}px"></i><span>${esc(d.slice(5))}</span></div>`;
+  }).join("") : "<div class='note'>No data</div>";
 
   const cols=["Order No","Order create date","Status","FulfillmentLocationName","finance_category","Order Qty","Actual_ShipDate"];
-  document.getElementById("slaThead").innerHTML="<tr>"+cols.map(c=>`<th>${esc(c)}</th>`).join("")+"<th>SLA Status</th><th>Hours</th><th>SLA Due</th></tr>";
+  document.getElementById("slaThead").innerHTML="<tr>"+cols.map(c=>`<th>${esc(c)}</th>`).join("")+"<th>SLA Status</th><th>Hours Taken</th><th>SLA Due</th></tr>";
+
   document.getElementById("slaTbody").innerHTML=rows.map(r=>{
-    const due=r._due?r._due.toLocaleString():"";
-    const hrs=r._hours!=null?r._hours.toFixed(1):"";
+    const due=r._due ? r._due.toLocaleString() : "";
+    const hrs=r._hours!=null ? r._hours.toFixed(1) : "";
     const cls=r._sla==="Within SLA"?"sla-good":r._sla==="Breached"?"sla-bad":r._sla==="At Risk"?"sla-risk":"";
     return "<tr>"+cols.map(c=>`<td>${esc(r[c]??"")}</td>`).join("")+
       `<td class="${cls}">${esc(r._sla)}</td><td>${hrs}</td><td>${esc(due)}</td></tr>`;
   }).join("");
-  document.getElementById("slaNote").textContent=`${total.toLocaleString()} non-cancelled unique orders • SLA calculated from Order create date to Actual_ShipDate; open orders use current browser time.`;
+
+  document.getElementById("slaNote").textContent =
+    `${total.toLocaleString()} non-cancelled unique orders • SLA = Order create date → Actual_ShipDate • target 48 hours. Open orders use current browser time.`;
 }
+
 function clearSlaFilters(){
   ["slaWarehouse","slaChannel","slaStatus"].forEach(id=>document.getElementById(id).value="");
-  document.getElementById("slaFrom").value=""; document.getElementById("slaTo").value="";
+  document.getElementById("slaFrom").value="";
+  document.getElementById("slaTo").value="";
   applySlaFilters();
 }
+
 document.querySelectorAll(".tab").forEach(btn=>btn.addEventListener("click",()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
   document.querySelectorAll(".tab-panel").forEach(x=>x.classList.remove("active-panel"));
-  btn.classList.add("active"); document.getElementById(btn.dataset.tab).classList.add("active-panel");
-  if(btn.dataset.tab==="slaTab"){initSlaFilters();applySlaFilters();}
+  btn.classList.add("active");
+  document.getElementById(btn.dataset.tab).classList.add("active-panel");
+  if(btn.dataset.tab==="slaTab"){
+    initSlaFilters();
+    applySlaFilters();
+  }
 }));
-["slaWarehouse","slaChannel","slaStatus","slaFrom","slaTo"].forEach(id=>document.getElementById(id).addEventListener("change",applySlaFilters));
 
-// Keep SLA dashboard synchronized after a new Excel upload.
-const originalFileHandler = document.getElementById("file").onchange;
-document.getElementById("file").addEventListener("change",()=>setTimeout(()=>{initSlaFilters();applySlaFilters();},100));
-initSlaFilters(); applySlaFilters();
+["slaWarehouse","slaChannel","slaStatus","slaFrom","slaTo"].forEach(id=>
+  document.getElementById(id).addEventListener("change",applySlaFilters)
+);
+
+// After a new Vinculum Excel is uploaded, refresh SLA controls too.
+document.getElementById("file").addEventListener("change",()=>{
+  setTimeout(()=>{initSlaFilters();applySlaFilters();},150);
+});
+
+initSlaFilters();
+applySlaFilters();
 
 </script>
 </body>
