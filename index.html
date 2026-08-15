@@ -62,7 +62,8 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 
 <div class="tabs">
   <button class="tab active" data-tab="ordersTab">Order Fulfillment</button>
-  <button class="tab" data-tab="slaTab">48H SLA Dashboard</button>
+  <button class="tab" data-tab="slaTab">48H Ship SLA</button>
+  <button class="tab" data-tab="manifestSlaTab">48H Manifest SLA</button>
 </div>
 
 <main class="wrap">
@@ -134,7 +135,63 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
     <div class="note" id="slaNote"></div>
     <div class="table-wrap"><table><thead id="slaThead"></thead><tbody id="slaTbody"></tbody></table></div>
   </section>
+
 </section>
+
+<section id="manifestSlaTab" class="tab-panel">
+  <div class="sla-head">
+    <div>
+      <h2>48H Manifest SLA Dashboard</h2>
+      <div class="note">SLA basis: <b>Order create date → Manifest Create Date</b>. Target = 48 hours. Cancelled orders are excluded.</div>
+    </div>
+    <div class="sla-target">Target <b>48 Hours</b></div>
+  </div>
+
+  <div class="kpis sla-kpis" id="manifestKpis"></div>
+
+  <div class="filters">
+    <div class="field">Warehouse<select id="manifestWarehouse"><option value="">All Warehouses</option></select></div>
+    <div class="field">Finance Category<select id="manifestChannel"><option value="">All Finance Categories</option></select></div>
+    <div class="field">SLA Status<select id="manifestStatus"><option value="">All SLA Status</option></select></div>
+    <div class="field">From Date<input id="manifestFrom" type="date"></div>
+    <div class="field">To Date<input id="manifestTo" type="date"></div>
+    <button onclick="clearManifestFilters()">Clear Filters</button>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <div class="section-title">Manifest SLA Status</div>
+      <div id="manifestStatusChart" class="hbars"></div>
+    </section>
+    <section class="card">
+      <div class="section-title">Warehouse-wise Manifest SLA</div>
+      <div id="manifestWarehouseChart" class="hbars"></div>
+    </section>
+    <section class="card">
+      <div class="section-title">WH Remarks — Breached Orders</div>
+      <div id="remarksChart" class="hbars"></div>
+      <div class="note" style="margin-top:10px">This summary uses <b>WH remarks</b> only for orders that breached the 48H Manifest SLA.</div>
+    </section>
+    <section class="card">
+      <div class="section-title">Manifest SLA Rules</div>
+      <div class="sla-rules">
+        <div><span class="dot green-dot"></span><b>Within SLA</b> — manifest created in ≤ 48 hours</div>
+        <div><span class="dot red-dot"></span><b>Breached</b> — manifest created after 48 hours or still open after 48 hours</div>
+        <div><span class="dot amber-dot"></span><b>At Risk</b> — no manifest yet and due within the next 6 hours</div>
+      </div>
+    </section>
+  </div>
+
+  <section class="table-card">
+    <div class="section-title">48H Manifest SLA Order Details</div>
+    <div class="note" id="manifestNote"></div>
+    <div class="table-wrap"><table><thead id="manifestThead"></thead><tbody id="manifestTbody"></tbody></table></div>
+  </section>
+
+  <section class="table-card">
+    <div class="section-title">WH Remarks Summary — Breached Orders</div>
+    <div class="table-wrap"><table><thead><tr><th>WH Remarks</th><th>Breached Orders</th><th>% of Breached</th></tr></thead><tbody id="remarksTbody"></tbody></table></div>
+  </section>
 
 </main>
 
@@ -416,6 +473,136 @@ document.getElementById("file").addEventListener("change",()=>{
 
 initSlaFilters();
 applySlaFilters();
+
+
+let manifestCurrent = [];
+
+function buildManifestRows(){
+  const now = new Date();
+  const orders = orderLevel(raw);
+  return orders
+    .filter(r => String(get(r,["Status"])).toLowerCase() !== "cancelled")
+    .map(r => {
+      const orderDate = parseSlaDate(get(r,["Order create date","OrderDate"]));
+      const manifestDate = parseSlaDate(get(r,["Manifest Create Date","Manifest Create Date "]));
+      const remarks = String(get(r,["WH remarks","WH Remarks","WH remarks "]) ?? "").trim() || "Blank / No Remarks";
+      if(!orderDate) return {...r,_manifestSla:"No Order Create Date",_manifestHours:null,_manifestDue:null,_whRemarks:remarks};
+      const due = new Date(orderDate.getTime()+48*3600000);
+      const end = manifestDate || now;
+      const hours = (end-orderDate)/3600000;
+      let status;
+      if(manifestDate) status = hours <= 48 ? "Within SLA" : "Breached";
+      else status = hours > 48 ? "Breached" : (hours >= 42 ? "At Risk" : "Open");
+      return {...r,_manifestSla:status,_manifestHours:hours,_manifestDue:due,_whRemarks:remarks};
+    })
+    .filter(r=>r._manifestSla!=="No Order Create Date");
+}
+
+function fillManifestSelect(id,values,label){
+  const el=document.getElementById(id), old=el.value, vals=unique(values);
+  el.innerHTML=`<option value="">${label}</option>`+vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+  if(vals.includes(old)) el.value=old;
+}
+
+function initManifestFilters(){
+  const rows=buildManifestRows();
+  fillManifestSelect("manifestWarehouse",rows.map(r=>get(r,["FulfillmentLocationName"])),"All Warehouses");
+  fillManifestSelect("manifestChannel",rows.map(r=>get(r,["finance_category","Finance Category"])),"All Finance Categories");
+  fillManifestSelect("manifestStatus",rows.map(r=>r._manifestSla),"All SLA Status");
+}
+
+function applyManifestFilters(){
+  const w=document.getElementById("manifestWarehouse").value;
+  const c=document.getElementById("manifestChannel").value;
+  const s=document.getElementById("manifestStatus").value;
+  const f=document.getElementById("manifestFrom").value;
+  const t=document.getElementById("manifestTo").value;
+
+  manifestCurrent=buildManifestRows().filter(r=>{
+    if(w && String(get(r,["FulfillmentLocationName"]))!==w) return false;
+    if(c && String(get(r,["finance_category","Finance Category"]))!==c) return false;
+    if(s && r._manifestSla!==s) return false;
+    const d=String(get(r,["Order create date","OrderDate"])).slice(0,10);
+    if(f && d<f) return false;
+    if(t && d>t) return false;
+    return true;
+  });
+  renderManifestSla();
+}
+
+function renderManifestSla(){
+  const rows=manifestCurrent;
+  const total=rows.length;
+  const within=rows.filter(r=>r._manifestSla==="Within SLA").length;
+  const breachedRows=rows.filter(r=>r._manifestSla==="Breached");
+  const breached=breachedRows.length;
+  const risk=rows.filter(r=>r._manifestSla==="At Risk").length;
+  const open=rows.filter(r=>r._manifestSla==="Open").length;
+  const measured=within+breached;
+  const pct=measured ? within/measured*100 : 0;
+
+  const cards=[
+    ["Manifest SLA Orders",total,""],
+    ["Within SLA",within,"sla-kpi-good"],
+    ["Manifest SLA %",pct.toFixed(1)+"%","sla-kpi-good"],
+    ["Breached",breached,"sla-kpi-bad"],
+    ["At Risk",risk,"sla-kpi-risk"],
+    ["Open < 48H",open,""]
+  ];
+  document.getElementById("manifestKpis").innerHTML=cards.map(([k,v,cl])=>
+    `<div class="kpi ${cl}"><small>${k}</small><strong>${typeof v==="number"?v.toLocaleString():v}</strong></div>`).join("");
+
+  const statusData={};
+  rows.forEach(r=>statusData[r._manifestSla]=(statusData[r._manifestSla]||0)+1);
+  hbar("manifestStatusChart","",Object.entries(statusData).sort((a,b)=>b[1]-a[1]));
+  hbar("manifestWarehouseChart","",counts(rows,"FulfillmentLocationName"));
+
+  const remarks={};
+  breachedRows.forEach(r=>remarks[r._whRemarks]=(remarks[r._whRemarks]||0)+1);
+  const remarkPairs=Object.entries(remarks).sort((a,b)=>b[1]-a[1]);
+  hbar("remarksChart","",remarkPairs);
+
+  document.getElementById("remarksTbody").innerHTML = remarkPairs.length
+    ? remarkPairs.map(([remark,count])=>`<tr><td>${esc(remark)}</td><td>${count.toLocaleString()}</td><td>${breached?((count/breached)*100).toFixed(1):"0.0"}%</td></tr>`).join("")
+    : `<tr><td colspan="3">No breached orders in the selected filters.</td></tr>`;
+
+  const cols=["Order No","Order create date","Status","FulfillmentLocationName","finance_category","Order Qty","Manifest Create Date","WH remarks"];
+  document.getElementById("manifestThead").innerHTML="<tr>"+cols.map(c=>`<th>${esc(c)}</th>`).join("")+
+    "<th>Manifest SLA</th><th>Hours Taken</th><th>SLA Due</th></tr>";
+
+  document.getElementById("manifestTbody").innerHTML=rows.map(r=>{
+    const due=r._manifestDue?r._manifestDue.toLocaleString():"";
+    const hrs=r._manifestHours!=null?r._manifestHours.toFixed(1):"";
+    const cls=r._manifestSla==="Within SLA"?"sla-good":r._manifestSla==="Breached"?"sla-bad":r._manifestSla==="At Risk"?"sla-risk":"";
+    return "<tr>"+cols.map(c=>`<td>${esc(r[c]??"")}</td>`).join("")+
+      `<td class="${cls}">${esc(r._manifestSla)}</td><td>${hrs}</td><td>${esc(due)}</td></tr>`;
+  }).join("");
+
+  document.getElementById("manifestNote").textContent =
+    `${total.toLocaleString()} non-cancelled unique orders • Manifest SLA = Order create date → Manifest Create Date • target 48 hours. Open orders use current browser time.`;
+}
+
+function clearManifestFilters(){
+  ["manifestWarehouse","manifestChannel","manifestStatus"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("manifestFrom").value="";
+  document.getElementById("manifestTo").value="";
+  applyManifestFilters();
+}
+
+document.querySelectorAll(".tab").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    if(btn.dataset.tab==="manifestSlaTab"){
+      initManifestFilters();
+      applyManifestFilters();
+    }
+  });
+});
+["manifestWarehouse","manifestChannel","manifestStatus","manifestFrom","manifestTo"].forEach(id=>
+  document.getElementById(id).addEventListener("change",applyManifestFilters)
+);
+
+initManifestFilters();
+applyManifestFilters();
 
 </script>
 </body>
