@@ -48,7 +48,11 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 .sla-good{color:#187a43;font-weight:700}.sla-bad{color:#c52f2f;font-weight:700}.sla-risk{color:#a46d00;font-weight:700}
 @media(max-width:1050px){.sla-kpis{grid-template-columns:repeat(3,1fr)}}
 
-</style>
+
+.kpi-pct{display:block;margin-top:6px;font-size:13px;font-weight:700;color:#667788}
+.kpi-pct.good{color:#187a43}.kpi-pct.bad{color:#c52f2f}.kpi-pct.risk{color:#a46d00}
+.bar-pct{font-size:12px;font-weight:700;margin-left:8px;color:#667788}
+""</style>
 </head>
 <body>
 <header class="header">
@@ -100,9 +104,9 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
   <div class="sla-head">
     <div>
       <h2>48H SLA Dashboard</h2>
-      <div class="note">SLA basis: <b>Order create date → Actual_ShipDate</b>. Target = 48 hours. Cancelled orders are excluded.</div>
+      <div class="note">SLA basis: <b>Order create date → Manifest Create Date / Actual_ShipDate (earliest)</b>. Target = 48 hours. Cancelled orders are excluded.</div>
     </div>
-    <div class="sla-target">Target <b>48 Hours</b></div>
+    <div class="sla-target">Target <b>48 Hours</b><br><small>Manifest or Ship — whichever is earlier</small></div>
   </div>
 
   <div class="kpis sla-kpis" id="slaKpis"></div>
@@ -141,8 +145,8 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 <section id="manifestSlaTab" class="tab-panel">
   <div class="sla-head">
     <div>
-      <h2>48H Manifest SLA Dashboard</h2>
-      <div class="note">SLA basis: <b>Order create date → Manifest Create Date</b>. Target = 48 hours. Cancelled orders are excluded.</div>
+      <h2>48H Manifest Milestone Dashboard</h2>
+      <div class="note">Milestone check: <b>Order create date → Manifest Create Date</b>. Target = 48 hours. Cancelled orders are excluded.</div>
     </div>
     <div class="sla-target">Target <b>48 Hours</b></div>
   </div>
@@ -345,16 +349,38 @@ function buildSlaRows(){
     .map(r => {
       const orderDate = parseSlaDate(get(r,["Order create date","OrderDate"]));
       const shipDate = parseSlaDate(get(r,["Actual_ShipDate","Actual_ShipDate "]));
-      if(!orderDate) return {...r,_sla:"No Order Create Date",_hours:null,_due:null};
-      const due = new Date(orderDate.getTime() + 48*3600000);
-      const end = shipDate || now;
-      const hours = (end - orderDate)/3600000;
+      const manifestDate = parseSlaDate(get(r,["Manifest Create Date","Manifest Create Date "]));
+
+      if(!orderDate) return {...r,_sla:"No Order Create Date",_hours:null,_due:null,_slaMilestone:""};
+
+      const due = new Date(orderDate.getTime()+48*3600000);
+
+      // Operational SLA completion is the FIRST valid milestone:
+      // Manifest Create Date or Actual_ShipDate.
+      // This prevents a late WMS close/ship event from falsely showing a breach
+      // when the order was already manifested within 48 hours.
+      const candidates = [
+        manifestDate ? {date:manifestDate,label:"Manifest Create Date"} : null,
+        shipDate ? {date:shipDate,label:"Actual_ShipDate"} : null
+      ].filter(Boolean).sort((a,b)=>a.date-b.date);
+
+      const milestone = candidates[0] || null;
+      const end = milestone ? milestone.date : now;
+      const hours = (end-orderDate)/3600000;
+
       let status;
-      if(shipDate) status = hours <= 48 ? "Within SLA" : "Breached";
+      if(milestone) status = hours <= 48 ? "Within SLA" : "Breached";
       else status = hours > 48 ? "Breached" : (hours >= 42 ? "At Risk" : "Open");
-      return {...r,_sla:status,_hours:hours,_due:due};
+
+      return {
+        ...r,
+        _sla:status,
+        _hours:hours,
+        _due:due,
+        _slaMilestone:milestone ? milestone.label : "Open"
+      };
     })
-    .filter(r => r._sla !== "No Order Create Date");
+    .filter(r=>r._sla!=="No Order Create Date");
 }
 
 function initSlaFilters(){
@@ -399,21 +425,34 @@ function renderSla(){
   const measured=within+breached;
   const pct=measured ? within/measured*100 : 0;
 
+  const totalPct = total ? 100 : 0;
+  const withinPct = total ? within/total*100 : 0;
+  const breachedPct = total ? breached/total*100 : 0;
+  const riskPct = total ? risk/total*100 : 0;
+  const openPct = total ? open/total*100 : 0;
+
   const cards=[
-    ["SLA Orders",total,""],
-    ["Within SLA",within,"sla-kpi-good"],
-    ["SLA %",pct.toFixed(1)+"%","sla-kpi-good"],
-    ["Breached",breached,"sla-kpi-bad"],
-    ["At Risk",risk,"sla-kpi-risk"],
-    ["Open < 48H",open,""]
+    ["SLA Orders",total,totalPct,""],
+    ["Within SLA",within,withinPct,"sla-kpi-good"],
+    ["SLA %",pct,null,"sla-kpi-good"],
+    ["Breached",breached,breachedPct,"sla-kpi-bad"],
+    ["At Risk",risk,riskPct,"sla-kpi-risk"],
+    ["Open < 48H",open,openPct,""]
   ];
-  document.getElementById("slaKpis").innerHTML=cards.map(([k,v,cl])=>
-    `<div class="kpi ${cl}"><small>${k}</small><strong>${typeof v==="number"?v.toLocaleString():v}</strong></div>`).join("");
+  document.getElementById("slaKpis").innerHTML=cards.map(([k,v,p,cl])=>
+    `<div class="kpi ${cl}"><small>${k}</small><strong>${typeof v==="number"?v.toLocaleString():v}</strong>${p!==null?`<span class="kpi-pct">${p.toFixed(1)}% of SLA orders</span>`:""}</div>`).join("");
 
   const statusData={};
   rows.forEach(r=>statusData[r._sla]=(statusData[r._sla]||0)+1);
-  hbar("slaStatusChart","",Object.entries(statusData).sort((a,b)=>b[1]-a[1]));
-  hbar("slaWarehouseChart","",counts(rows,"FulfillmentLocationName"));
+  const shipStatusPairs=Object.entries(statusData).sort((a,b)=>b[1]-a[1]);
+  hbar("slaStatusChart","",shipStatusPairs);
+  document.getElementById("slaStatusChart").insertAdjacentHTML("afterbegin",
+    `<div class="note">Percent of SLA orders: ${shipStatusPairs.map(([k,v])=>`${esc(k)} ${total?((v/total)*100).toFixed(1):"0.0"}%`).join(" • ")}</div>`);
+  const shipWhPairs=counts(rows,"FulfillmentLocationName");
+  hbar("slaWarehouseChart","",shipWhPairs);
+  const shipWhTotal=shipWhPairs.reduce((s,x)=>s+x[1],0);
+  document.getElementById("slaWarehouseChart").insertAdjacentHTML("afterbegin",
+    `<div class="note">Warehouse share: ${shipWhPairs.map(([k,v])=>`${esc(k)} ${shipWhTotal?((v/shipWhTotal)*100).toFixed(1):"0.0"}%`).join(" • ")}</div>`);
 
   const daily={};
   rows.forEach(r=>{
@@ -429,19 +468,19 @@ function renderSla(){
     return `<div class="bar"><em>${p.toFixed(0)}%</em><i style="height:${Math.max(2,p/100*190)}px"></i><span>${esc(d.slice(5))}</span></div>`;
   }).join("") : "<div class='note'>No data</div>";
 
-  const cols=["Order No","Order create date","Status","FulfillmentLocationName","finance_category","Order Qty","Actual_ShipDate"];
-  document.getElementById("slaThead").innerHTML="<tr>"+cols.map(c=>`<th>${esc(c)}</th>`).join("")+"<th>SLA Status</th><th>Hours Taken</th><th>SLA Due</th></tr>";
+  const cols=["Order No","Order create date","Status","FulfillmentLocationName","finance_category","Order Qty","Manifest Create Date","Actual_ShipDate"];
+  document.getElementById("slaThead").innerHTML="<tr>"+cols.map(c=>`<th>${esc(c)}</th>`).join("")+"<th>SLA Status</th><th>Hours Taken</th><th>SLA Due</th><th>Milestone Used</th></tr>";
 
   document.getElementById("slaTbody").innerHTML=rows.map(r=>{
     const due=r._due ? r._due.toLocaleString() : "";
     const hrs=r._hours!=null ? r._hours.toFixed(1) : "";
     const cls=r._sla==="Within SLA"?"sla-good":r._sla==="Breached"?"sla-bad":r._sla==="At Risk"?"sla-risk":"";
     return "<tr>"+cols.map(c=>`<td>${esc(r[c]??"")}</td>`).join("")+
-      `<td class="${cls}">${esc(r._sla)}</td><td>${hrs}</td><td>${esc(due)}</td></tr>`;
+      `<td class="${cls}">${esc(r._sla)}</td><td>${hrs}</td><td>${esc(due)}</td><td>${esc(r._slaMilestone)}</td></tr>`;
   }).join("");
 
   document.getElementById("slaNote").textContent =
-    `${total.toLocaleString()} non-cancelled unique orders • SLA = Order create date → Actual_ShipDate • target 48 hours. Open orders use current browser time.`;
+    `${total.toLocaleString()} non-cancelled unique orders • SLA = Order create date → earliest of Manifest Create Date / Actual_ShipDate • target 48 hours. Open orders use current browser time.`;
 }
 
 function clearSlaFilters(){
@@ -541,21 +580,34 @@ function renderManifestSla(){
   const measured=within+breached;
   const pct=measured ? within/measured*100 : 0;
 
+  const totalPct = total ? 100 : 0;
+  const withinPct = total ? within/total*100 : 0;
+  const breachedPct = total ? breached/total*100 : 0;
+  const riskPct = total ? risk/total*100 : 0;
+  const openPct = total ? open/total*100 : 0;
+
   const cards=[
-    ["Manifest SLA Orders",total,""],
-    ["Within SLA",within,"sla-kpi-good"],
-    ["Manifest SLA %",pct.toFixed(1)+"%","sla-kpi-good"],
-    ["Breached",breached,"sla-kpi-bad"],
-    ["At Risk",risk,"sla-kpi-risk"],
-    ["Open < 48H",open,""]
+    ["Manifest SLA Orders",total,totalPct,""],
+    ["Within SLA",within,withinPct,"sla-kpi-good"],
+    ["Manifest SLA %",pct,null,"sla-kpi-good"],
+    ["Breached",breached,breachedPct,"sla-kpi-bad"],
+    ["At Risk",risk,riskPct,"sla-kpi-risk"],
+    ["Open < 48H",open,openPct,""]
   ];
-  document.getElementById("manifestKpis").innerHTML=cards.map(([k,v,cl])=>
-    `<div class="kpi ${cl}"><small>${k}</small><strong>${typeof v==="number"?v.toLocaleString():v}</strong></div>`).join("");
+  document.getElementById("manifestKpis").innerHTML=cards.map(([k,v,p,cl])=>
+    `<div class="kpi ${cl}"><small>${k}</small><strong>${typeof v==="number"?v.toLocaleString():v}</strong>${p!==null?`<span class="kpi-pct">${p.toFixed(1)}% of SLA orders</span>`:""}</div>`).join("");
 
   const statusData={};
   rows.forEach(r=>statusData[r._manifestSla]=(statusData[r._manifestSla]||0)+1);
-  hbar("manifestStatusChart","",Object.entries(statusData).sort((a,b)=>b[1]-a[1]));
-  hbar("manifestWarehouseChart","",counts(rows,"FulfillmentLocationName"));
+  const manifestStatusPairs=Object.entries(statusData).sort((a,b)=>b[1]-a[1]);
+  hbar("manifestStatusChart","",manifestStatusPairs);
+  document.getElementById("manifestStatusChart").insertAdjacentHTML("afterbegin",
+    `<div class="note">Percent of manifest SLA orders: ${manifestStatusPairs.map(([k,v])=>`${esc(k)} ${total?((v/total)*100).toFixed(1):"0.0"}%`).join(" • ")}</div>`);
+  const manifestWhPairs=counts(rows,"FulfillmentLocationName");
+  hbar("manifestWarehouseChart","",manifestWhPairs);
+  const manifestWhTotal=manifestWhPairs.reduce((s,x)=>s+x[1],0);
+  document.getElementById("manifestWarehouseChart").insertAdjacentHTML("afterbegin",
+    `<div class="note">Warehouse share: ${manifestWhPairs.map(([k,v])=>`${esc(k)} ${manifestWhTotal?((v/manifestWhTotal)*100).toFixed(1):"0.0"}%`).join(" • ")}</div>`);
 
   const remarks={};
   breachedRows.forEach(r=>remarks[r._whRemarks]=(remarks[r._whRemarks]||0)+1);
