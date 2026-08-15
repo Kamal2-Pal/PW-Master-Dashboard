@@ -359,6 +359,8 @@ document.getElementById("file").addEventListener("change",e=>{
         }); return x;
       });
       populateFilters(); clearFilters();
+      initSlaFilters(); applySlaFilters();
+      initManifestFilters(); applyManifestFilters();
       document.getElementById("sourceText").textContent=`Loaded: ${file.name} • ${raw.length.toLocaleString()} report rows`;
     }catch(err){alert("Excel read nahi ho payi: "+err.message);}
   };
@@ -687,8 +689,7 @@ document.querySelectorAll(".tab").forEach(btn=>{
   document.getElementById(id).addEventListener("change",applyManifestFilters)
 );
 
-initManifestFilters();
-applyManifestFilters();
+loadCentralExcel();
 
 </script>
 </body>
