@@ -1,0 +1,53 @@
+name: Update latest Picker report
+
+on:
+  push:
+    paths:
+      - 'picker-reports/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-picker:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Find latest uploaded picker report
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          FILE="$(git diff --diff-filter=AM --name-only HEAD^ HEAD -- 'picker-reports/*' \
+            | grep -Ei '\.(xlsx|xls|csv)$' | tail -n 1 || true)"
+
+          if [ -z "$FILE" ]; then
+            echo "No new picker report file found."
+            exit 0
+          fi
+
+          echo "Using picker report: $FILE"
+          cp "$FILE" picker-data.xlsx
+
+      - name: Commit stable picker-data.xlsx
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- picker-data.xlsx; then
+            echo "picker-data.xlsx is already up to date."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add picker-data.xlsx
+          git commit -m "Update latest Picker report"
+          git push
