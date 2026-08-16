@@ -1140,6 +1140,7 @@ document.getElementById("pickerFileInput").onchange=async e=>{
     // It is stored in the browser, so refresh/reopen will not revert to old data.
     await savePickerLocal(data,f.name);
     loadPickerObjects(data,f.name);
+    savePickerReportLocally(data,f.name);
     document.getElementById("pickerDateFilter").value="";
     renderPicker();
   }catch(err){
@@ -1148,6 +1149,39 @@ document.getElementById("pickerFileInput").onchange=async e=>{
     e.target.value="";
   }
 };
+
+const PICKER_LOCAL_STORAGE_KEY = "vinculum_picker_report_v1";
+
+function savePickerReportLocally(data, name){
+  try{
+    localStorage.setItem(PICKER_LOCAL_STORAGE_KEY, JSON.stringify({
+      name: name || "Uploaded Picker Report",
+      rows: data || [],
+      savedAt: new Date().toISOString()
+    }));
+    return true;
+  }catch(err){
+    console.warn("Could not save Picker Report locally:", err);
+    return false;
+  }
+}
+
+function loadPickerReportLocally(){
+  try{
+    const saved = localStorage.getItem(PICKER_LOCAL_STORAGE_KEY);
+    if(!saved) return false;
+    const obj = JSON.parse(saved);
+    if(!obj || !Array.isArray(obj.rows) || !obj.rows.length) return false;
+
+    loadPickerObjects(obj.rows, `${obj.name || "Uploaded Picker Report"} • saved on this browser`);
+    document.getElementById("pickerDateFilter").value="";
+    renderPicker();
+    return true;
+  }catch(err){
+    console.warn("Could not load saved Picker Report:", err);
+    return false;
+  }
+}
 
 async function loadLatestPickerFromGithub(){
   // First priority: the latest file manually uploaded through the dashboard.
