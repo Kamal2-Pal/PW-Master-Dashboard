@@ -238,6 +238,8 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
     <div class="pill">Bin logic: SPR / MTR / GP B2B</div>
   </div>
 
+  <div class="note" id="pickerSourceLine" style="margin:8px 0 14px">Loaded from attached picker report</div>
+
   <div class="cards" id="pickerCards"></div>
 
   <div class="panel">
@@ -1003,7 +1005,7 @@ document.getElementById("pickerFileInput").onchange=async e=>{
   }
 };
 function resetPickerReport(){pickerRows=PICKER_INITIAL_DATA;document.getElementById("pickerSourceLine").textContent="Loaded from attached picker report";populatePickerFilters();document.getElementById("pickerDateFilter").value="";renderPicker();}
-["userFilter","binFilter","whFilter","dateFilter"].forEach(id=>document.getElementById(id).addEventListener("change",renderPicker));
+["pickerUserFilter","pickerBinFilter","pickerWhFilter","pickerDateFilter"].forEach(id=>document.getElementById(id).addEventListener("change",renderPicker));
 populatePickerFilters();renderPicker();
 
 </script>
