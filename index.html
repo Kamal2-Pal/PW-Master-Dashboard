@@ -60,7 +60,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 .picker-scope .hero h2{margin:0 0 5px;font-size:22px}
 .picker-scope .hero p{margin:0;color:#66778a;font-size:13px}
 .picker-scope .pill{background:#eef5ff;color:#175ea8;border-radius:20px;padding:10px 16px;font-weight:700;white-space:nowrap}
-.picker-scope .picker-kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:18px}
+.picker-scope .picker-kpis{display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-bottom:18px}
 .picker-scope .picker-kpi{background:#fff;border:1px solid #e3e8ee;border-radius:12px;padding:16px;box-shadow:0 2px 8px #0000000a}
 .picker-scope .picker-kpi small{color:#6b7785;text-transform:uppercase;font-weight:700;font-size:11px}
 .picker-scope .picker-kpi strong{display:block;font-size:27px;margin-top:8px}
@@ -76,6 +76,9 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 .picker-scope th:first-child,.picker-scope td:first-child{text-align:left}
 .picker-scope .group{background:#eef5ff!important;color:#175ea8;font-weight:800;text-align:center!important}
 .picker-scope .note{font-size:12px;color:#6d7a88;margin:6px 0 12px}
+@media(max-width:1200px){
+  .picker-scope .picker-kpis{grid-template-columns:repeat(4,1fr)}
+}
 @media(max-width:1050px){
   .picker-scope .picker-kpis{grid-template-columns:repeat(3,1fr)}
   .picker-scope .hero{align-items:flex-start;flex-direction:column}
@@ -970,10 +973,20 @@ function renderPicker(){
   const spr=data.filter(r=>pickerBinGroup(pickerVal(r,"Bin"))==="SPR");
   const mtr=data.filter(r=>pickerBinGroup(pickerVal(r,"Bin"))==="MTR");
   const gp=data.filter(r=>pickerBinGroup(pickerVal(r,"Bin"))==="GP B2B");
+  // Bin cards are LINE-ITEM counts, not unique Picklist counts.
+  // Every report row belonging to SPR / MTR / GP B2B counts as one line item.
+  const sprLineCount=spr.length;
+  const mtrLineCount=mtr.length;
+  const gpLineCount=gp.length;
   document.getElementById("pickerCards").innerHTML=[
-    ["PICK USERS",users],["PICKLIST COUNT",picklists],["ORDER COUNT",orders],["ORDER QTY",qty,""],
-    ["SPR QTY",spr.reduce((s,r)=>s+pickerNum(pickerVal(r,"Qty")),0),""],["MTR QTY",mtr.reduce((s,r)=>s+pickerNum(pickerVal(r,"Qty")),0),""]
-  ].map(x=>`<div class="picker-kpi"><small>${x[0]}</small><strong>${pickerFmt(x[1])}</strong><span class="kpi-pct">Current filtered report</span></div>`).join("");
+    ["PICK USERS",users,"Current filtered report"],
+    ["PICKLIST COUNT",picklists,"Unique Picklists"],
+    ["ORDER COUNT",orders,"Unique Orders"],
+    ["ORDER QTY",qty,"Total Qty"],
+    ["SPR LINE COUNT",sprLineCount,"SPR line items"],
+    ["MTR LINE COUNT",mtrLineCount,"MTR line items"],
+    ["GP B2B LINE COUNT",gpLineCount,"GP B2B line items"]
+  ].map(x=>`<div class="picker-kpi"><small>${x[0]}</small><strong>${pickerFmt(x[1])}</strong><span class="kpi-pct">${x[2]}</span></div>`).join("");
 
   const ag=aggregatePicker(data);
   const byUser=new Map();
