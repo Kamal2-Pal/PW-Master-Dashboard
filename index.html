@@ -52,22 +52,39 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 .kpi-pct{display:block;margin-top:6px;font-size:13px;font-weight:700;color:#667788}
 .kpi-pct.good{color:#187a43}.kpi-pct.bad{color:#c52f2f}.kpi-pct.risk{color:#a46d00}
 .bar-pct{font-size:12px;font-weight:700;margin-left:8px;color:#667788}
-""
-.picker-scope *{box-sizing:border-box}.picker-scope body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f3f5f7;color:#182230}
-.picker-scope .header{background:#151b23;color:#fff;padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:20px}
-.picker-scope .brand{display:flex;align-items:center;gap:14px}.picker-scope .logo{wid.picker-scope .picker-scope th:44px;height:44px;border-radius:10px;background:#f57c00;display:grid;place-items:center;font-size:24px;font-weight:800}.picker-scope .title h1{font-size:24px;margin:0 0 4px}.picker-scope .sub{font-size:14px;color:#aeb9c6}
-.picker-scope .actions{display:flex;gap:10px}.picker-scope .btn{border:0;border-radius:10px;padding:13px 18px;font-weight:700;cursor:pointer;font-size:15px}.picker-scope .upload{background:#0d1117;color:#fff}.picker-scope .reset{background:#fff;color:#182230}
-.picker-scope .picker-scope .tabs{background:#151b23;padding:0 28px 18px;display:flex;gap:10px}.picker-scope .tab{padding:13px 20px;border-radius:10px 10px 0 0;background:#232d39;color:#eaf0f6;font-weight:700}.picker-scope .tab.active{background:#fff;color:#182230}
-.picker-scope .wrap{padding:28px}.picker-scope .hero{background:#fff;border:1px solid #dbe2e9;border-radius:16px;padding:24px 28px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;gap:20px}.picker-scope .picker-scope .hero h2{margin:0 0 8px;font-size:26px}.picker-scope .picker-scope .hero p{margin:0;color:#66778a}.picker-scope .pill{background:#edf5ff;border-radius:30px;padding:15px 22px;font-weight:700;color:#1261a0;white-space:nowrap}
-.picker-scope .picker-scope .cards{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px;margin-bottom:20px}.picker-scope .card{background:#fff;border:1px solid #dbe2e9;border-radius:15px;padding:20px}.picker-scope .label{font-size:13px;color:#587086;font-weight:700}.picker-scope .value{font-size:32px;font-weight:800;margin-top:10px}.picker-scope .muted{font-size:13px;color:#66778a;margin-top:5px}
-.picker-scope .panel{background:#fff;border:1px solid #dbe2e9;border-radius:16px;padding:22px;margin-bottom:20px}.picker-scope .picker-scope .panel h3{margin:0 0 16px;font-size:21px}
-.picker-scope .filters{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:12px}.picker-scope .picker-scope .filters label{font-size:12px;color:#587086;font-weight:700;display:block;margin-bottom:6px}.picker-scope .picker-scope .filters select,.picker-scope .picker-scope .filters input{wid.picker-scope .picker-scope th:100%;padding:12px;border:1px solid #cbd6e1;border-radius:9px;background:#fff;font-size:14px}
-.picker-scope .picker-scope ..picker-scope table-wrap{overflow:auto}.picker-scope table{wid.picker-scope .picker-scope th:100%;border-collapse:collapse;min-wid.picker-scope .picker-scope th:1050px}.picker-scope .picker-scope th,.picker-scope td{padding:12px 10px;border-bottom:1px solid #e6ebf0;text-align:right;white-space:nowrap}.picker-scope .picker-scope .picker-scope th:first-child,.picker-scope .picker-scope td:first-child{text-align:left}.picker-scope .picker-scope th{background:#f7f9fb;color:#4d6478;font-size:12px;text-transform:uppercase}.picker-scope td{font-size:14px}.picker-scope .group{background:#edf5ff!important;color:#135d93;font-weight:800;text-align:center!important}
-.picker-scope .note{font-size:13px;color:#66778a;line-height:1.5}
-@media(max-wid.picker-scope .picker-scope th:1000px){.picker-scope .picker-scope .cards{grid-template-columns:repeat(3,1fr)}.picker-scope .filters{grid-template-columns:1fr 1fr}.picker-scope .hero{align-items:flex-start;flex-direction:column}}
-@media(max-wid.picker-scope .picker-scope th:650px){.picker-scope .picker-scope .cards{grid-template-columns:1fr 1fr}.picker-scope .wrap{padding:14px}.picker-scope .header{padding:14px}.picker-scope .picker-scope .tabs{padding:0 14px 14px}.picker-scope .actions{flex-direction:column}}
 
-.picker-scope .picker-actions{margin-bottom:12px}.picker-scope .upload-label{display:inline-block}
+.picker-scope{width:100%}
+.picker-scope *{box-sizing:border-box}
+.picker-actions{display:flex;justify-content:flex-end;gap:10px;margin-bottom:12px}
+.picker-scope .hero{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:20px}
+.picker-scope .hero h2{margin:0 0 5px;font-size:22px}
+.picker-scope .hero p{margin:0;color:#66778a;font-size:13px}
+.picker-scope .pill{background:#eef5ff;color:#175ea8;border-radius:20px;padding:10px 16px;font-weight:700;white-space:nowrap}
+.picker-scope .picker-kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:18px}
+.picker-scope .picker-kpi{background:#fff;border:1px solid #e3e8ee;border-radius:12px;padding:16px;box-shadow:0 2px 8px #0000000a}
+.picker-scope .picker-kpi small{color:#6b7785;text-transform:uppercase;font-weight:700;font-size:11px}
+.picker-scope .picker-kpi strong{display:block;font-size:27px;margin-top:8px}
+.picker-scope .panel{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:18px;margin-bottom:16px;overflow:hidden}
+.picker-scope .panel h3{margin:0 0 14px;font-size:18px}
+.picker-scope .filters{background:#fff;border:0;padding:0;display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:0}
+.picker-scope .filters>div{display:flex;flex-direction:column;gap:6px;font-size:11px;color:#657281;font-weight:700;text-transform:uppercase}
+.picker-scope .filters select,.picker-scope .filters input{min-width:145px;padding:10px;border:1px solid #ccd5df;border-radius:7px;background:#fff;font-size:14px}
+.picker-scope .table-wrap{overflow:auto;max-height:430px;border:1px solid #edf0f3;border-radius:8px}
+.picker-scope table{border-collapse:collapse;width:100%;font-size:12px;min-width:1050px}
+.picker-scope th,.picker-scope td{padding:9px 10px;border-bottom:1px solid #edf0f3;text-align:right;white-space:nowrap}
+.picker-scope th{position:sticky;top:0;background:#f7f9fb;z-index:1}
+.picker-scope th:first-child,.picker-scope td:first-child{text-align:left}
+.picker-scope .group{background:#eef5ff!important;color:#175ea8;font-weight:800;text-align:center!important}
+.picker-scope .note{font-size:12px;color:#6d7a88;margin:6px 0 12px}
+@media(max-width:1050px){
+  .picker-scope .picker-kpis{grid-template-columns:repeat(3,1fr)}
+  .picker-scope .hero{align-items:flex-start;flex-direction:column}
+}
+@media(max-width:650px){
+  .picker-scope .picker-kpis{grid-template-columns:repeat(2,1fr)}
+  .picker-scope .picker-actions{flex-direction:column;align-items:stretch}
+  .picker-scope .picker-actions>*{width:100%;text-align:center}
+}
 </style>
 </head>
 <body>
@@ -240,7 +257,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 
   <div class="note" id="pickerSourceLine" style="margin:8px 0 14px">Loaded from attached picker report • 2,492 report rows</div>
 
-  <div class="cards" id="pickerCards"></div>
+  <div class="picker-kpis" id="pickerCards"></div>
 
   <div class="panel">
     <h3>Filters</h3>
@@ -954,9 +971,9 @@ function renderPicker(){
   const mtr=data.filter(r=>pickerBinGroup(pickerVal(r,"Bin"))==="MTR");
   const gp=data.filter(r=>pickerBinGroup(pickerVal(r,"Bin"))==="GP B2B");
   document.getElementById("pickerCards").innerHTML=[
-    ["PICK USERS",users,"active"],["UNIQUE PICKLISTS",picklists,""],["UNIQUE ORDERS",orders,""],["ORDER QTY",qty,""],
+    ["PICK USERS",users],["PICKLIST COUNT",picklists],["ORDER COUNT",orders],["ORDER QTY",qty,""],
     ["SPR QTY",spr.reduce((s,r)=>s+pickerNum(pickerVal(r,"Qty")),0),""],["MTR QTY",mtr.reduce((s,r)=>s+pickerNum(pickerVal(r,"Qty")),0),""]
-  ].map(x=>`<div class="card"><div class="label">${x[0]}</div><div class="value">${pickerFmt(x[1])}</div><div class="muted">Current filtered report</div></div>`).join("");
+  ].map(x=>`<div class="picker-kpi"><small>${x[0]}</small><strong>${pickerFmt(x[1])}</strong><span class="kpi-pct">Current filtered report</span></div>`).join("");
 
   const ag=aggregatePicker(data);
   const byUser=new Map();
@@ -965,7 +982,7 @@ function renderPicker(){
     const z=byUser.get(x.user);
     z[x.group]={p:x.picklists.size,o:x.orders.size,q:x.qty};
   });
-  let html=`<thead><tr><th rowspan="2">Pick User</th>${["SPR","MTR","GP B2B"].map(g=>`<th class="group" colspan="3">${g}</th>`).join("")}<th rowspan="2">Total Picklists</th><th rowspan="2">Total Orders</th><th rowspan="2">Total Qty</th></tr><tr>${["SPR","MTR","GP B2B"].map(()=>"<th>Picklists</th><th>Orders</th><th>Qty</th>").join("")}</tr></thead><tbody>`;
+  let html=`<thead><tr><th rowspan="2">Pick User</th>${["SPR","MTR","GP B2B"].map(g=>`<th class="group" colspan="3">${g}</th>`).join("")}<th rowspan="2">Total Picklist Count</th><th rowspan="2">Total Order Count</th><th rowspan="2">Total Qty</th></tr><tr>${["SPR","MTR","GP B2B"].map(()=>"<th>Picklist Count</th><th>Order Count</th><th>Qty</th>").join("")}</tr></thead><tbody>`;
   byUser.forEach(z=>{
     const tp=z.SPR.p+z.MTR.p+z["GP B2B"].p, to=z.SPR.o+z.MTR.o+z["GP B2B"].o, tq=z.SPR.q+z.MTR.q+z["GP B2B"].q;
     html+=`<tr><td><b>${z.user}</b></td>${["SPR","MTR","GP B2B"].map(g=>`<td>${pickerFmt(z[g].p)}</td><td>${pickerFmt(z[g].o)}</td><td>${pickerFmt(z[g].q)}</td>`).join("")}<td><b>${pickerFmt(tp)}</b></td><td><b>${pickerFmt(to)}</b></td><td><b>${pickerFmt(tq)}</b></td></tr>`;
@@ -991,7 +1008,7 @@ function populatePickerFilters(){
 }
 function loadPickerObjects(data,name){
   pickerRows=data;
-  document.getElementById("pickerSourceLine").textContent=`Loaded: ${name} • ${pickerRows.length.toLocaleString()} report pickerRows`;
+  document.getElementById("pickerSourceLine").textContent=`Loaded: ${name} • ${pickerRows.length.toLocaleString()} report rows`;
   populatePickerFilters(); renderPicker();
 }
 document.getElementById("pickerFileInput").onchange=async e=>{
