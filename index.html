@@ -982,7 +982,16 @@ function renderPicker(){
     if(wh && pickerNorm(pickerVal(r,"Source WH"))!==wh)return false;
     if(date){
       const d=parsePickerDate(pickerVal(r,"Pick Date"));
-      if(!d || d.toISOString().slice(0,10)!==date)return false;
+      if(!d) return false;
+      // Compare using the browser's local calendar date.
+      // Do not use toISOString(), because it converts the local date to UTC
+      // and can shift a midnight Pick Date to the previous calendar day.
+      const localDate = [
+        d.getFullYear(),
+        String(d.getMonth()+1).padStart(2,"0"),
+        String(d.getDate()).padStart(2,"0")
+      ].join("-");
+      if(localDate!==date)return false;
     }
     return true;
   });
