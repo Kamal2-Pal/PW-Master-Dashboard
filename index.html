@@ -476,20 +476,24 @@ function buildSlaRows(){
 
     // TAB 2 BUSINESS RULE:
     // Order create date -> Actual_ShipDate ONLY.
-    // Manifest Create Date is NOT used in this SLA calculation.
+    // If Actual_ShipDate is blank, the order is OPEN, not BREACHED.
+    // The open order is split by age: <48H, At Risk (42-48H), or >48H.
     const end = shipDate || now;
     const hours = (end-orderDate)/3600000;
 
     let status;
-    if(shipDate) status = hours <= 48 ? "Within SLA" : "Breached";
-    else status = hours > 48 ? "Breached" : (hours >= 42 ? "At Risk" : "Open");
+    if(shipDate) {
+      status = hours <= 48 ? "Within SLA" : "Breached";
+    } else {
+      status = hours > 48 ? "Open >48H" : (hours >= 42 ? "At Risk" : "Open <48H");
+    }
 
     return {
       ...r,
       _sla:status,
       _hours:hours,
       _due:due,
-      _slaMilestone:shipDate ? "Actual_ShipDate" : "Open"
+      _slaMilestone:shipDate ? "Actual_ShipDate" : "Open - Actual_ShipDate blank"
     };
   });
 }
@@ -531,8 +535,9 @@ function renderSla(){
   const total=rows.length;
   const within=rows.filter(r=>r._sla==="Within SLA").length;
   const breached=rows.filter(r=>r._sla==="Breached").length;
+  const openUnder48=rows.filter(r=>r._sla==="Open <48H").length;
+  const openOver48=rows.filter(r=>r._sla==="Open >48H").length;
   const risk=rows.filter(r=>r._sla==="At Risk").length;
-  const open=rows.filter(r=>r._sla==="Open").length;
   const cancelled=rows.filter(r=>r._sla==="Cancelled").length;
   const noDate=rows.filter(r=>r._sla==="No Order Create Date").length;
   // SLA % = Within SLA / (Within SLA + Breached).
@@ -544,7 +549,8 @@ function renderSla(){
   const withinPct = total ? within/total*100 : 0;
   const breachedPct = total ? breached/total*100 : 0;
   const riskPct = total ? risk/total*100 : 0;
-  const openPct = total ? open/total*100 : 0;
+  const openUnder48Pct = total ? openUnder48/total*100 : 0;
+  const openOver48Pct = total ? openOver48/total*100 : 0;
 
   const cancelledPct = total ? cancelled/total*100 : 0;
   const noDatePct = total ? noDate/total*100 : 0;
@@ -555,7 +561,8 @@ function renderSla(){
     ["SLA %",pct,null,"sla-kpi-good"],
     ["Breached",breached,breachedPct,"sla-kpi-bad"],
     ["At Risk",risk,riskPct,"sla-kpi-risk"],
-    ["Open < 48H",open,openPct,""],
+    ["Open < 48H",openUnder48,openUnder48Pct,""],
+    ["Open > 48H",openOver48,openOver48Pct,"sla-kpi-bad"],
     ["Cancelled",cancelled,cancelledPct,""],
     ["No Create Date",noDate,noDatePct,"sla-kpi-bad"]
   ];
@@ -614,7 +621,7 @@ function renderSla(){
   }).join("");
 
   document.getElementById("slaNote").textContent =
-    `${total.toLocaleString()} unique orders • same order population as Order Fulfillment • SLA = Order create date → Actual_ShipDate • target 48 hours. Manifest Create Date is used only in the separate Manifest tab. Open orders use current browser time.`;
+    `${total.toLocaleString()} unique orders • same order population as Order Fulfillment • SLA = Order create date → Actual_ShipDate • target 48 hours. Manifest Create Date is used only in the separate Manifest tab. Blank Actual_ShipDate/Manifest Create Date = Open; open orders are split into <48H, At Risk, and >48H using current browser time.`;
 }
 
 function clearSlaFilters(){
@@ -665,8 +672,21 @@ function buildManifestRows(){
     const due = new Date(orderDate.getTime()+48*3600000);
     const end = manifestDate || now;
     const hours = (end-orderDate)/3600000;
-    const slaStatus = manifestDate ? (hours<=48 ? "Within SLA" : "Breached") : (hours>48 ? "Breached" : (hours>=42 ? "At Risk" : "Open"));
-    return {...r,_manifestSla:slaStatus,_manifestHours:hours,_manifestDue:due,_whRemarks:remarks};
+
+    // TAB 3 BUSINESS RULE:
+    // Order create date -> Manifest Create Date.
+    // If Manifest Create Date is blank, the order is OPEN, not BREACHED.
+    const slaStatus = manifestDate
+      ? (hours<=48 ? "Within SLA" : "Breached")
+      : (hours>48 ? "Open >48H" : (hours>=42 ? "At Risk" : "Open <48H"));
+
+    return {
+      ...r,
+      _manifestSla:slaStatus,
+      _manifestHours:hours,
+      _manifestDue:due,
+      _whRemarks:remarks
+    };
   });
 }
 
@@ -709,7 +729,8 @@ function renderManifestSla(){
   const breachedRows=rows.filter(r=>r._manifestSla==="Breached");
   const breached=breachedRows.length;
   const risk=rows.filter(r=>r._manifestSla==="At Risk").length;
-  const open=rows.filter(r=>r._manifestSla==="Open").length;
+  const openUnder48=rows.filter(r=>r._manifestSla==="Open <48H").length;
+  const openOver48=rows.filter(r=>r._manifestSla==="Open >48H").length;
   // SLA % = Within SLA / (Within SLA + Breached).
   // At Risk/Open are still shown separately and do not count as measured.
   const measured=within+breached;
@@ -719,7 +740,8 @@ function renderManifestSla(){
   const withinPct = total ? within/total*100 : 0;
   const breachedPct = total ? breached/total*100 : 0;
   const riskPct = total ? risk/total*100 : 0;
-  const openPct = total ? open/total*100 : 0;
+  const openUnder48Pct = total ? openUnder48/total*100 : 0;
+  const openOver48Pct = total ? openOver48/total*100 : 0;
 
   const cards=[
     ["Manifest SLA Orders",total,totalPct,""],
@@ -727,7 +749,8 @@ function renderManifestSla(){
     ["Manifest SLA %",pct,null,"sla-kpi-good"],
     ["Breached",breached,breachedPct,"sla-kpi-bad"],
     ["At Risk",risk,riskPct,"sla-kpi-risk"],
-    ["Open < 48H",open,openPct,""]
+    ["Open < 48H",openUnder48,openUnder48Pct,""],
+    ["Open > 48H",openOver48,openOver48Pct,"sla-kpi-bad"]
   ];
   document.getElementById("manifestKpis").innerHTML=cards.map(([k,v,p,cl])=>
     `<div class="kpi ${cl}"><small>${k}</small><strong>${typeof v==="number"?v.toLocaleString():v}</strong>${p!==null?`<span class="kpi-pct">${p.toFixed(1)}% of SLA orders</span>`:""}</div>`).join("");
@@ -766,7 +789,7 @@ function renderManifestSla(){
   }).join("");
 
   document.getElementById("manifestNote").textContent =
-    `${total.toLocaleString()} unique orders • same order population as Order Fulfillment • Manifest SLA = Order create date → Manifest Create Date • target 48 hours. Open orders use current browser time.`;
+    `${total.toLocaleString()} unique orders • same order population as Order Fulfillment • Manifest SLA = Order create date → Manifest Create Date • target 48 hours. Blank Actual_ShipDate/Manifest Create Date = Open; open orders are split into <48H, At Risk, and >48H using current browser time.`;
 }
 
 function clearManifestFilters(){
