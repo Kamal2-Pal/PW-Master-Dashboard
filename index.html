@@ -906,8 +906,10 @@ function pickerVal(r,k){return r[k] ?? "";}
 function pickerNorm(v){return String(v??"").trim();}
 function pickerBinGroup(bin){
   const s=pickerNorm(bin).toUpperCase();
-  if(s.startsWith("SPR")) return "SPR";
-  if(s.startsWith("MTR")) return "MTR";
+  // Treat the bin type as a dot-separated segment, so both
+  // "MTR.G1..." and "CA.MTR.G1..." are classified as MTR.
+  if(/(^|\.)SPR(\.|$)/.test(s)) return "SPR";
+  if(/(^|\.)MTR(\.|$)/.test(s)) return "MTR";
   return "GP B2B";
 }
 function pickerNum(v){const n=Number(v); return Number.isFinite(n)?n:0}
