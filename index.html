@@ -1051,7 +1051,29 @@ document.getElementById("pickerFileInput").onchange=async e=>{
 };
 function resetPickerReport(){pickerRows=PICKER_INITIAL_DATA;document.getElementById("pickerSourceLine").textContent=`Loaded from attached picker report • ${pickerRows.length.toLocaleString()} report rows`;populatePickerFilters();document.getElementById("pickerDateFilter").value="";renderPicker();}
 ["pickerUserFilter","pickerBinFilter","pickerWhFilter","pickerDateFilter"].forEach(id=>document.getElementById(id).addEventListener("change",renderPicker));
+
+async function loadLatestPickerFromGithub(){
+  try{
+    const url = "picker-data.xlsx?ts=" + Date.now();
+    const response = await fetch(url,{cache:"no-store"});
+    if(!response.ok) throw new Error("picker-data.xlsx not found");
+    const buf = await response.arrayBuffer();
+    const wb = XLSX.read(buf,{type:"array"});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const data = XLSX.utils.sheet_to_json(ws,{defval:""});
+    if(!Array.isArray(data) || !data.length) throw new Error("Picker report is empty");
+    const required=["Pick User","Bin","Qty","Picklist No.","Order No","Source WH"];
+    const keys=Object.keys(data[0]||{});
+    const missing=required.filter(k=>!keys.includes(k));
+    if(missing.length) throw new Error("Not a picker report: missing "+missing.join(", "));
+    loadPickerObjects(data,"latest GitHub picker report");
+  }catch(err){
+    console.warn("Latest GitHub picker report could not be loaded; using embedded report.",err);
+    populatePickerFilters();renderPicker();
+  }
+}
 populatePickerFilters();renderPicker();
+loadLatestPickerFromGithub();
 
 </script>
 </body>
