@@ -789,7 +789,7 @@ function renderManifestSla(){
   }).join("");
 
   document.getElementById("manifestNote").textContent =
-    `${total.toLocaleString()} unique orders • same order population as Order Fulfillment • Manifest SLA = Order create date → Manifest Create Date • target 48 hours. Blank Actual_ShipDate/Manifest Create Date = Open; open orders are split into <48H, At Risk, and >48H using current browser time.`;
+    `${total.toLocaleString()} unique orders • same order population as Order Fulfillment • Manifest SLA = Order create date → Manifest Create Date • target 48 hours. Blank Actual_ShipDate/Manifest Create Date = Open + " Cancelled orders are shown separately and excluded from SLA %."; open orders are split into <48H, At Risk, and >48H using current browser time.`;
 }
 
 function clearManifestFilters(){
