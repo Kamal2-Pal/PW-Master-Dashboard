@@ -41,7 +41,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 .tab-panel{display:none}.active-panel{display:block}
 .sla-head{display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:18px;margin-bottom:16px}
 .sla-head h2{margin:0 0 5px}.sla-target{background:#eef5ff;color:#175ea8;border-radius:20px;padding:10px 16px}
-.sla-kpis{grid-template-columns:repeat(6,1fr)}
+.sla-kpis{grid-template-columns:repeat(4,1fr)}
 .sla-kpi-good{border-left:5px solid #20a05a}.sla-kpi-bad{border-left:5px solid #d64545}.sla-kpi-risk{border-left:5px solid #e2a400}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px}.green-dot{background:#20a05a}.red-dot{background:#d64545}.amber-dot{background:#e2a400}
 .sla-rules{line-height:2.2;font-size:13px}
@@ -104,9 +104,9 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
   <div class="sla-head">
     <div>
       <h2>48H SLA Dashboard</h2>
-      <div class="note">SLA basis: <b>Order create date → Manifest Create Date / Actual_ShipDate (earliest)</b>. Target = 48 hours. Cancelled orders are excluded.</div>
+      <div class="note">SLA basis: <b>Order create date → Actual_ShipDate</b>. Target = 48 hours. All orders from Order Fulfillment are included.</div>
     </div>
-    <div class="sla-target">Target <b>48 Hours</b><br><small>Manifest or Ship — whichever is earlier</small></div>
+    <div class="sla-target">Target <b>48 Hours</b><br><small>Order create → Actual Ship</small></div>
   </div>
 
   <div class="kpis sla-kpis" id="slaKpis"></div>
@@ -127,12 +127,18 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
     <section class="card">
       <div class="section-title">SLA Rules</div>
       <div class="sla-rules">
-        <div><span class="dot green-dot"></span><b>Within SLA</b> — shipped in ≤ 48 hours</div>
-        <div><span class="dot red-dot"></span><b>Breached</b> — shipped after 48 hours or still open after 48 hours</div>
+        <div><span class="dot green-dot"></span><b>Within SLA</b> — Actual Ship in ≤ 48 hours</div>
+        <div><span class="dot red-dot"></span><b>Breached</b> — Actual Ship after 48 hours or still open after 48 hours</div>
         <div><span class="dot amber-dot"></span><b>At Risk</b> — open and due within the next 6 hours</div>
       </div>
     </section>
   </div>
+
+  <section class="card" style="margin-bottom:16px">
+    <div class="section-title">WH Remarks — Breached Orders</div>
+    <div class="note">Summary of <b>WH remarks</b> for orders breached on the 48H Ship SLA (Order create date → Actual_ShipDate).</div>
+    <div class="table-wrap"><table><thead><tr><th>WH Remarks</th><th>Breached Orders</th><th>% of Breached</th></tr></thead><tbody id="slaRemarksTbody"></tbody></table></div>
+  </section>
 
   <section class="table-card">
     <div class="section-title">48H SLA Order Details</div>
@@ -380,43 +386,46 @@ function parseSlaDate(v){
 function buildSlaRows(){
   const now = new Date();
   const orders = orderLevel(raw);
-  return orders
-    .filter(r => String(get(r,["Status"])).toLowerCase() !== "cancelled")
-    .map(r => {
-      const orderDate = parseSlaDate(get(r,["Order create date","OrderDate"]));
-      const shipDate = parseSlaDate(get(r,["Actual_ShipDate","Actual_ShipDate "]));
-      const manifestDate = parseSlaDate(get(r,["Manifest Create Date","Manifest Create Date "]));
 
-      if(!orderDate) return {...r,_sla:"No Order Create Date",_hours:null,_due:null,_slaMilestone:""};
+  return orders.map(r => {
+    const orderDate = parseSlaDate(get(r,["Order create date","OrderDate"]));
+    const shipDate = parseSlaDate(get(r,["Actual_ShipDate","Actual_ShipDate "]));
+    const isCancelled = String(get(r,["Status"])).toLowerCase().trim() === "cancelled";
 
-      const due = new Date(orderDate.getTime()+48*3600000);
-
-      // Operational SLA completion is the FIRST valid milestone:
-      // Manifest Create Date or Actual_ShipDate.
-      // This prevents a late WMS close/ship event from falsely showing a breach
-      // when the order was already manifested within 48 hours.
-      const candidates = [
-        manifestDate ? {date:manifestDate,label:"Manifest Create Date"} : null,
-        shipDate ? {date:shipDate,label:"Actual_ShipDate"} : null
-      ].filter(Boolean).sort((a,b)=>a.date-b.date);
-
-      const milestone = candidates[0] || null;
-      const end = milestone ? milestone.date : now;
-      const hours = (end-orderDate)/3600000;
-
-      let status;
-      if(milestone) status = hours <= 48 ? "Within SLA" : "Breached";
-      else status = hours > 48 ? "Breached" : (hours >= 42 ? "At Risk" : "Open");
-
+    if(isCancelled){
       return {
         ...r,
-        _sla:status,
-        _hours:hours,
-        _due:due,
-        _slaMilestone:milestone ? milestone.label : "Open"
+        _sla:"Cancelled",
+        _hours:null,
+        _due:orderDate ? new Date(orderDate.getTime()+48*3600000) : null,
+        _slaMilestone:"Cancelled"
       };
-    })
-    .filter(r=>r._sla!=="No Order Create Date");
+    }
+
+    if(!orderDate){
+      return {...r,_sla:"No Order Create Date",_hours:null,_due:null,_slaMilestone:""};
+    }
+
+    const due = new Date(orderDate.getTime()+48*3600000);
+
+    // TAB 2 BUSINESS RULE:
+    // Order create date -> Actual_ShipDate ONLY.
+    // Manifest Create Date is NOT used in this SLA calculation.
+    const end = shipDate || now;
+    const hours = (end-orderDate)/3600000;
+
+    let status;
+    if(shipDate) status = hours <= 48 ? "Within SLA" : "Breached";
+    else status = hours > 48 ? "Breached" : (hours >= 42 ? "At Risk" : "Open");
+
+    return {
+      ...r,
+      _sla:status,
+      _hours:hours,
+      _due:due,
+      _slaMilestone:shipDate ? "Actual_ShipDate" : "Open"
+    };
+  });
 }
 
 function initSlaFilters(){
@@ -458,6 +467,8 @@ function renderSla(){
   const breached=rows.filter(r=>r._sla==="Breached").length;
   const risk=rows.filter(r=>r._sla==="At Risk").length;
   const open=rows.filter(r=>r._sla==="Open").length;
+  const cancelled=rows.filter(r=>r._sla==="Cancelled").length;
+  const noDate=rows.filter(r=>r._sla==="No Order Create Date").length;
   const measured=within+breached;
   const pct=measured ? within/measured*100 : 0;
 
@@ -467,13 +478,18 @@ function renderSla(){
   const riskPct = total ? risk/total*100 : 0;
   const openPct = total ? open/total*100 : 0;
 
+  const cancelledPct = total ? cancelled/total*100 : 0;
+  const noDatePct = total ? noDate/total*100 : 0;
+
   const cards=[
-    ["SLA Orders",total,totalPct,""],
+    ["All Orders",total,totalPct,""],
     ["Within SLA",within,withinPct,"sla-kpi-good"],
     ["SLA %",pct,null,"sla-kpi-good"],
     ["Breached",breached,breachedPct,"sla-kpi-bad"],
     ["At Risk",risk,riskPct,"sla-kpi-risk"],
-    ["Open < 48H",open,openPct,""]
+    ["Open < 48H",open,openPct,""],
+    ["Cancelled",cancelled,cancelledPct,""],
+    ["No Create Date",noDate,noDatePct,"sla-kpi-bad"]
   ];
   document.getElementById("slaKpis").innerHTML=cards.map(([k,v,p,cl])=>
     `<div class="kpi ${cl}"><small>${k}</small><strong>${typeof v==="number"?v.toLocaleString():v}</strong>${p!==null?`<span class="kpi-pct">${p.toFixed(1)}% of SLA orders</span>`:""}</div>`).join("");
@@ -504,7 +520,21 @@ function renderSla(){
     return `<div class="bar"><em>${p.toFixed(0)}%</em><i style="height:${Math.max(2,p/100*190)}px"></i><span>${esc(d.slice(5))}</span></div>`;
   }).join("") : "<div class='note'>No data</div>";
 
-  const cols=["Order No","Order create date","Status","FulfillmentLocationName","finance_category","Order Qty","Manifest Create Date","Actual_ShipDate"];
+  const slaBreachedRows=rows.filter(r=>r._sla==="Breached");
+  const slaRemarks={};
+  slaBreachedRows.forEach(r=>{
+    const remark=String(get(r,["WH remarks","WH Remarks","WH remarks "]) ?? "").trim() || "Blank / No Remarks";
+    slaRemarks[remark]=(slaRemarks[remark]||0)+1;
+  });
+  const slaRemarkPairs=Object.entries(slaRemarks).sort((a,b)=>b[1]-a[1]);
+  const slaRemarksBody=document.getElementById("slaRemarksTbody");
+  if(slaRemarksBody){
+    slaRemarksBody.innerHTML=slaRemarkPairs.length
+      ? slaRemarkPairs.map(([remark,count])=>`<tr><td>${esc(remark)}</td><td>${count.toLocaleString()}</td><td>${breached?((count/breached)*100).toFixed(1):"0.0"}%</td></tr>`).join("")
+      : `<tr><td colspan="3">No breached orders in the selected filters.</td></tr>`;
+  }
+
+  const cols=["Order No","Order create date","Status","FulfillmentLocationName","finance_category","Order Qty","Manifest Create Date","Actual_ShipDate","WH remarks"];
   document.getElementById("slaThead").innerHTML="<tr>"+cols.map(c=>`<th>${esc(c)}</th>`).join("")+"<th>SLA Status</th><th>Hours Taken</th><th>SLA Due</th><th>Milestone Used</th></tr>";
 
   document.getElementById("slaTbody").innerHTML=rows.map(r=>{
@@ -516,7 +546,7 @@ function renderSla(){
   }).join("");
 
   document.getElementById("slaNote").textContent =
-    `${total.toLocaleString()} non-cancelled unique orders • SLA = Order create date → earliest of Manifest Create Date / Actual_ShipDate • target 48 hours. Open orders use current browser time.`;
+    `${total.toLocaleString()} unique orders • SLA = Order create date → Actual_ShipDate • target 48 hours. Manifest Create Date is used only in the separate Manifest tab. Open orders use current browser time.`;
 }
 
 function clearSlaFilters(){
@@ -555,22 +585,21 @@ let manifestCurrent = [];
 function buildManifestRows(){
   const now = new Date();
   const orders = orderLevel(raw);
-  return orders
-    .filter(r => String(get(r,["Status"])).toLowerCase() !== "cancelled")
-    .map(r => {
-      const orderDate = parseSlaDate(get(r,["Order create date","OrderDate"]));
-      const manifestDate = parseSlaDate(get(r,["Manifest Create Date","Manifest Create Date "]));
-      const remarks = String(get(r,["WH remarks","WH Remarks","WH remarks "]) ?? "").trim() || "Blank / No Remarks";
-      if(!orderDate) return {...r,_manifestSla:"No Order Create Date",_manifestHours:null,_manifestDue:null,_whRemarks:remarks};
-      const due = new Date(orderDate.getTime()+48*3600000);
-      const end = manifestDate || now;
-      const hours = (end-orderDate)/3600000;
-      let status;
-      if(manifestDate) status = hours <= 48 ? "Within SLA" : "Breached";
-      else status = hours > 48 ? "Breached" : (hours >= 42 ? "At Risk" : "Open");
-      return {...r,_manifestSla:status,_manifestHours:hours,_manifestDue:due,_whRemarks:remarks};
-    })
-    .filter(r=>r._manifestSla!=="No Order Create Date");
+  return orders.map(r => {
+    const status = String(get(r,["Status"])).trim().toLowerCase();
+    const orderDate = parseSlaDate(get(r,["Order create date","OrderDate"]));
+    const manifestDate = parseSlaDate(get(r,["Manifest Create Date","Manifest Create Date "]));
+    const remarks = String(get(r,["WH remarks","WH Remarks","WH remarks "]) ?? "").trim() || "Blank / No Remarks";
+
+    if(status === "cancelled") return {...r,_manifestSla:"Cancelled",_manifestHours:null,_manifestDue:orderDate?new Date(orderDate.getTime()+48*3600000):null,_whRemarks:remarks};
+    if(!orderDate) return {...r,_manifestSla:"No Order Create Date",_manifestHours:null,_manifestDue:null,_whRemarks:remarks};
+
+    const due = new Date(orderDate.getTime()+48*3600000);
+    const end = manifestDate || now;
+    const hours = (end-orderDate)/3600000;
+    const slaStatus = manifestDate ? (hours<=48 ? "Within SLA" : "Breached") : (hours>48 ? "Breached" : (hours>=42 ? "At Risk" : "Open"));
+    return {...r,_manifestSla:slaStatus,_manifestHours:hours,_manifestDue:due,_whRemarks:remarks};
+  });
 }
 
 function fillManifestSelect(id,values,label){
@@ -667,7 +696,7 @@ function renderManifestSla(){
   }).join("");
 
   document.getElementById("manifestNote").textContent =
-    `${total.toLocaleString()} non-cancelled unique orders • Manifest SLA = Order create date → Manifest Create Date • target 48 hours. Open orders use current browser time.`;
+    `${total.toLocaleString()} unique orders • Manifest SLA = Order create date → Manifest Create Date • target 48 hours. Open orders use current browser time.`;
 }
 
 function clearManifestFilters(){
