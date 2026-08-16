@@ -1040,11 +1040,87 @@ function populatePickerFilters(){
   fill("pickerUserFilter",new Set(pickerRows.map(r=>pickerNorm(pickerVal(r,"Pick User"))).filter(Boolean)),"All Pick Users");
   fill("pickerWhFilter",new Set(pickerRows.map(r=>pickerNorm(pickerVal(r,"Source WH"))).filter(Boolean)),"All Warehouses");
 }
+const PICKER_DB_NAME = "VinculumWMSPickerDB";
+const PICKER_DB_STORE = "currentReport";
+const PICKER_DB_KEY = "latest";
+
+function openPickerDB(){
+  return new Promise((resolve,reject)=>{
+    if(!window.indexedDB){
+      reject(new Error("Browser IndexedDB is not available"));
+      return;
+    }
+    const req=indexedDB.open(PICKER_DB_NAME,1);
+    req.onupgradeneeded=()=>{
+      const db=req.result;
+      if(!db.objectStoreNames.contains(PICKER_DB_STORE)){
+        db.createObjectStore(PICKER_DB_STORE);
+      }
+    };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error||new Error("Could not open local Picker storage"));
+  });
+}
+
+async function savePickerLocal(data,name){
+  try{
+    const db=await openPickerDB();
+    await new Promise((resolve,reject)=>{
+      const tx=db.transaction(PICKER_DB_STORE,"readwrite");
+      tx.objectStore(PICKER_DB_STORE).put({
+        name:name,
+        rows:data,
+        savedAt:new Date().toISOString()
+      },PICKER_DB_KEY);
+      tx.oncomplete=resolve;
+      tx.onerror=()=>reject(tx.error||new Error("Could not save Picker Report locally"));
+    });
+    db.close();
+  }catch(err){
+    console.warn("Picker local save failed:",err);
+  }
+}
+
+async function getPickerLocal(){
+  try{
+    const db=await openPickerDB();
+    const result=await new Promise((resolve,reject)=>{
+      const tx=db.transaction(PICKER_DB_STORE,"readonly");
+      const req=tx.objectStore(PICKER_DB_STORE).get(PICKER_DB_KEY);
+      req.onsuccess=()=>resolve(req.result||null);
+      req.onerror=()=>reject(req.error||new Error("Could not read local Picker Report"));
+    });
+    db.close();
+    return result;
+  }catch(err){
+    console.warn("Picker local read failed:",err);
+    return null;
+  }
+}
+
+async function clearPickerLocal(){
+  try{
+    const db=await openPickerDB();
+    await new Promise((resolve,reject)=>{
+      const tx=db.transaction(PICKER_DB_STORE,"readwrite");
+      tx.objectStore(PICKER_DB_STORE).delete(PICKER_DB_KEY);
+      tx.oncomplete=resolve;
+      tx.onerror=()=>reject(tx.error||new Error("Could not clear local Picker Report"));
+    });
+    db.close();
+  }catch(err){
+    console.warn("Picker local clear failed:",err);
+  }
+}
+
 function loadPickerObjects(data,name){
   pickerRows=data;
-  document.getElementById("pickerSourceLine").textContent=`Loaded: ${name} • ${pickerRows.length.toLocaleString()} report rows`;
-  populatePickerFilters(); renderPicker();
+  document.getElementById("pickerSourceLine").textContent=
+    `Loaded: ${name} • ${pickerRows.length.toLocaleString()} report rows`;
+  populatePickerFilters();
+  renderPicker();
 }
+
 document.getElementById("pickerFileInput").onchange=async e=>{
   const f=e.target.files[0];
   if(!f)return;
@@ -1052,12 +1128,17 @@ document.getElementById("pickerFileInput").onchange=async e=>{
     const buf=await f.arrayBuffer();
     const wb=XLSX.read(buf,{type:"array",cellDates:true});
     const ws=wb.Sheets[wb.SheetNames[0]];
-    const data=XLSX.utils.sheet_to_json(ws,{defval:""});
+    const data=normalizeRows(XLSX.utils.sheet_to_json(ws,{defval:""}));
     if(!data.length) throw new Error("Picker report is empty");
+
     const required=["Pick User","Bin","Qty","Picklist No.","Order No","Source WH"];
     const keys=Object.keys(data[0]||{});
     const missing=required.filter(k=>!keys.includes(k));
     if(missing.length) throw new Error("Invalid Picker report. Missing: "+missing.join(", "));
+
+    // THIS UPLOAD BECOMES THE NEW CURRENT PICKER REPORT.
+    // It is stored in the browser, so refresh/reopen will not revert to old data.
+    await savePickerLocal(data,f.name);
     loadPickerObjects(data,f.name);
     document.getElementById("pickerDateFilter").value="";
     renderPicker();
@@ -1069,9 +1150,20 @@ document.getElementById("pickerFileInput").onchange=async e=>{
 };
 
 async function loadLatestPickerFromGithub(){
-  // LIVE PICKER SOURCE:
-  // GitHub Actions must maintain this single stable file.
-  // The dashboard never falls back to an older/embedded Picker dataset.
+  // First priority: the latest file manually uploaded through the dashboard.
+  // This prevents GitHub Pages from reverting to an older Picker dataset
+  // after a browser refresh.
+  const local=await getPickerLocal();
+  if(local && Array.isArray(local.rows) && local.rows.length){
+    const saved=new Date(local.savedAt||"");
+    const when=isNaN(saved.getTime()) ? "" : ` • saved ${saved.toLocaleString()}`;
+    loadPickerObjects(local.rows,`latest uploaded Picker Report (${local.name||"local file"})${when}`);
+    document.getElementById("pickerDateFilter").value="";
+    renderPicker();
+    return;
+  }
+
+  // No local upload yet: load the GitHub live file.
   const path = "picker-reports/latest-picker-report.csv";
   try{
     const cacheBust = Date.now() + "-" + Math.random().toString(36).slice(2);
@@ -1085,8 +1177,6 @@ async function loadLatestPickerFromGithub(){
     const text = await response.text();
     if(!text.trim()) throw new Error("latest-picker-report.csv is empty");
 
-    // CSV is intentionally read directly so the live file shown on GitHub
-    // Pages is exactly the file maintained by the Picker workflow.
     const wb = XLSX.read(text,{type:"string",cellDates:true});
     const ws = wb.Sheets[wb.SheetNames[0]];
     const data = normalizeRows(XLSX.utils.sheet_to_json(ws,{defval:""}));
@@ -1102,25 +1192,28 @@ async function loadLatestPickerFromGithub(){
     document.getElementById("pickerDateFilter").value="";
     renderPicker();
   }catch(err){
-    // IMPORTANT: never show stale/embedded Picker data.
     pickerRows=[];
     document.getElementById("pickerSourceLine").textContent =
-      "Live Picker Report unavailable — upload a new Picker Report to GitHub";
+      "No Picker Report loaded — click Upload Picker Report and select the new file";
     populatePickerFilters();
     renderPicker();
     console.warn("Live Picker Report unavailable:",err);
   }
 }
 
-function resetPickerReport(){
+async function resetPickerReport(){
+  // Reset means: remove the browser's locally uploaded report and return
+  // to the GitHub live source. It does NOT restore any embedded old dataset.
+  await clearPickerLocal();
   document.getElementById("pickerDateFilter").value="";
-  loadLatestPickerFromGithub();
+  await loadLatestPickerFromGithub();
 }
 
 ["pickerUserFilter","pickerBinFilter","pickerWhFilter","pickerDateFilter"]
   .forEach(id=>document.getElementById(id).addEventListener("change",renderPicker));
 
-// Initial load from GitHub's stable live file. No stale embedded fallback.
+// Initial load: use the latest file uploaded in this browser if present;
+// otherwise use GitHub's live Picker CSV.
 loadLatestPickerFromGithub();
 
 </script>
