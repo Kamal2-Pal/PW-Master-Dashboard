@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vinculum WMS Dashboard V2</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f3f5f7;color:#182230}
+.header{background:#151b23;color:#fff;padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.title{display:flex;align-items:center;gap:14px}.logo{width:42px;height:42px;border-radius:10px;background:#f57c00;display:grid;place-items:center;font-weight:900}
+h1{font-size:22px;margin:0 0 4px}.sub{font-size:13px;color:#aeb9c6}
+.actions{display:flex;gap:9px;align-items:center}button,.upload-label{border:1px solid #d4dbe3;background:#fff;padding:10px 14px;border-radius:8px;font-weight:700;cursor:pointer}
+.primary{background:#111;color:#fff;border-color:#111}.green{background:#eaf8ef;color:#18753b;border-color:#bce7ca}
+.wrap{max-width:1500px;margin:auto;padding:20px}.section-title{font-size:18px;font-weight:800;margin:0 0 14px}
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:18px}
+.kpi{background:#fff;border:1px solid #e3e8ee;border-radius:12px;padding:16px;box-shadow:0 2px 8px #0000000a}
+.kpi small{color:#6b7785;text-transform:uppercase;font-weight:700;font-size:11px}.kpi strong{display:block;font-size:27px;margin-top:8px}
+.filters{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:18px}
+.field{display:flex;flex-direction:column;gap:6px;font-size:11px;color:#657281;font-weight:700;text-transform:uppercase}
+select,input{min-width:145px;padding:10px;border:1px solid #ccd5df;border-radius:7px;background:#fff;font-size:14px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}.card{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:18px;overflow:hidden}
+.chart{height:260px;display:flex;align-items:end;gap:10px;padding:15px 5px 5px;border-top:1px solid #eef1f4}
+.bar{flex:1;min-width:18px;display:flex;flex-direction:column;justify-content:end;align-items:center;height:100%}
+.bar i{display:block;width:100%;max-width:42px;background:#2d8cff;border-radius:5px 5px 0 0;min-height:2px}
+.bar span{font-size:10px;color:#637181;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70px}
+.bar em{font-style:normal;font-size:10px;font-weight:700;margin-bottom:4px}
+.hbars .row{display:grid;grid-template-columns:140px 1fr 45px;gap:9px;align-items:center;margin:11px 0;font-size:12px}
+.track{height:11px;background:#edf1f5;border-radius:8px;overflow:hidden}.fill{height:100%;background:#2d8cff;border-radius:8px}
+.table-card{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:18px;overflow:hidden}
+.table-wrap{overflow:auto;max-height:430px;border:1px solid #edf0f3;border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;border-bottom:1px solid #edf0f3;text-align:left;white-space:nowrap}th{position:sticky;top:0;background:#f7f9fb;z-index:1}
+.status{padding:4px 8px;border-radius:12px;background:#eef5ff;color:#1667b5;font-weight:700}
+.note{font-size:12px;color:#6d7a88;margin:6px 0 12px}#file{display:none}
+@media(max-width:1050px){.kpis{grid-template-columns:repeat(3,1fr)}.grid{grid-template-columns:1fr}}
+@media(max-width:650px){.kpis{grid-template-columns:repeat(2,1fr)}.wrap{padding:10px}}
+
+.tabs{background:#151b23;padding:0 28px 12px;display:flex;gap:8px}
+.tab{border:1px solid #38414c;background:#242c36;color:#dce4ed;padding:10px 16px;border-radius:8px 8px 0 0;cursor:pointer;font-weight:700}
+.tab.active{background:#fff;color:#182230;border-color:#fff}
+.tab-panel{display:none}.active-panel{display:block}
+.sla-head{display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:18px;margin-bottom:16px}
+.sla-head h2{margin:0 0 5px}.sla-target{background:#eef5ff;color:#175ea8;border-radius:20px;padding:10px 16px}
+.sla-kpis{grid-template-columns:repeat(4,1fr)}
+.sla-kpi-good{border-left:5px solid #20a05a}.sla-kpi-bad{border-left:5px solid #d64545}.sla-kpi-risk{border-left:5px solid #e2a400}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px}.green-dot{background:#20a05a}.red-dot{background:#d64545}.amber-dot{background:#e2a400}
+.sla-rules{line-height:2.2;font-size:13px}
+.sla-good{color:#187a43;font-weight:700}.sla-bad{color:#c52f2f;font-weight:700}.sla-risk{color:#a46d00;font-weight:700}
+@media(max-width:1050px){.sla-kpis{grid-template-columns:repeat(3,1fr)}}
+
+
+.kpi-pct{display:block;margin-top:6px;font-size:13px;font-weight:700;color:#667788}
+.kpi-pct.good{color:#187a43}.kpi-pct.bad{color:#c52f2f}.kpi-pct.risk{color:#a46d00}
+.bar-pct{font-size:12px;font-weight:700;margin-left:8px;color:#667788}
+""</style>
+</head>
+<body>
+<header class="header">
+ <div class="title"><div class="logo">V</div><div><h1>Vinculum WMS Dashboard</h1><div class="sub" id="sourceText">Loading latest central Vinculum report…</div></div></div>
+ <div class="actions">
+   <label class="upload-label primary" for="file">＋ Upload Vinculum Excel</label>
+   <button onclick="resetAll()">↻ Reset</button>
+ </div>
+ <input id="file" type="file" accept=".xlsx,.xls,.csv">
+</header>
+
+<div class="tabs">
+  <button class="tab active" data-tab="ordersTab">Order Fulfillment</button>
+  <button class="tab" data-tab="slaTab">48H Ship SLA</button>
+  <button class="tab" data-tab="manifestSlaTab">48H Manifest SLA</button>
+</div>
+
+<main class="wrap">
+<section id="ordersTab" class="tab-panel active-panel">
+ <div class="kpis" id="kpis"></div>
+
+ <div class="note" style="margin:0 0 10px 4px">Order Fulfillment filters and daily reporting use <b>Order create date</b>. Channel dimension is <b>finance_category</b>.</div>
+<div class="filters">
+   <div class="field">Warehouse<select id="warehouse"><option value="">All Warehouses</option></select></div>
+   <div class="field">Finance Category<select id="channel"><option value="">All Finance Categories</option></select></div>
+   <div class="field">Status<select id="status"><option value="">All Status</option></select></div>
+   <div class="field">Order Type<select id="orderType"><option value="">All Order Types</option></select></div>
+   <div class="field">Order Creation From<input id="fromDate" type="date"></div>
+   <div class="field">Order Creation To<input id="toDate" type="date"></div>
+   <button onclick="clearFilters()">Clear Filters</button>
+ </div>
+
+ <div class="grid">
+   <section class="card"><div class="section-title">Order Status</div><div id="statusChart" class="hbars"></div></section>
+   <section class="card"><div class="section-title">Warehouse-wise Orders</div><div id="warehouseChart" class="hbars"></div></section>
+   <section class="card"><div class="section-title">Finance Category-wise Orders</div><div id="channelChart" class="hbars"></div></section>
+   <section class="card"><div class="section-title">Day-wise Orders</div><div id="dayChart" class="chart"></div></section>
+ </div>
+
+ <section class="table-card">
+   <div class="section-title">Order Details</div>
+   <div class="note" id="rowNote"></div>
+   <div class="table-wrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+ </section>
+</section>
+
+
+<section id="slaTab" class="tab-panel">
+  <div class="sla-head">
+    <div>
+      <h2>48H SLA Dashboard</h2>
+      <div class="note">SLA basis: <b>Order create date → Actual_ShipDate</b>. Target = 48 hours. All orders from Order Fulfillment are included.</div>
+    </div>
+    <div class="sla-target">Target <b>48 Hours</b><br><small>Order create → Actual Ship</small></div>
+  </div>
+
+  <div class="kpis sla-kpis" id="slaKpis"></div>
+
+  <div class="filters">
+    <div class="field">Warehouse<select id="slaWarehouse"><option value="">All Warehouses</option></select></div>
+    <div class="field">Finance Category<select id="slaChannel"><option value="">All Finance Categories</option></select></div>
+    <div class="field">SLA Status<select id="slaStatus"><option value="">All SLA Status</option></select></div>
+    <div class="field">From Date<input id="slaFrom" type="date"></div>
+    <div class="field">To Date<input id="slaTo" type="date"></div>
+    <button onclick="clearSlaFilters()">Clear SLA Filters</button>
+  </div>
+
+  <div class="grid">
+    <section class="card"><div class="section-title">SLA Status</div><div id="slaStatusChart" class="hbars"></div></section>
+    <section class="card"><div class="section-title">Warehouse SLA Performance</div><div id="slaWarehouseChart" class="hbars"></div></section>
+    <section class="card"><div class="section-title">Daily SLA %</div><div id="slaDayChart" class="chart"></div></section>
+    <section class="card">
+      <div class="section-title">SLA Rules</div>
+      <div class="sla-rules">
+        <div><span class="dot green-dot"></span><b>Within SLA</b> — Actual Ship in ≤ 48 hours</div>
+        <div><span class="dot red-dot"></span><b>Breached</b> — Actual Ship after 48 hours or still open after 48 hours</div>
+        <div><span class="dot amber-dot"></span><b>At Risk</b> — open and due within the next 6 hours</div>
+      </div>
+    </section>
+  </div>
+
+  <section class="card" style="margin-bottom:16px">
+    <div class="section-title">WH Remarks — Breached Orders</div>
+    <div class="note">Summary of <b>WH remarks</b> for orders breached on the 48H Ship SLA (Order create date → Actual_ShipDate).</div>
+    <div class="table-wrap"><table><thead><tr><th>WH Remarks</th><th>Breached Orders</th><th>% of Breached</th></tr></thead><tbody id="slaRemarksTbody"></tbody></table></div>
+  </section>
+
+  <section class="table-card">
+    <div class="section-title">48H SLA Order Details</div>
+    <div class="note" id="slaNote"></div>
+    <div class="table-wrap"><table><thead id="slaThead"></thead><tbody id="slaTbody"></tbody></table></div>
+  </section>
+
+</section>
+
+<section id="manifestSlaTab" class="tab-panel">
+  <div class="sla-head">
+    <div>
+      <h2>48H Manifest Milestone Dashboard</h2>
+      <div class="note">Milestone check: <b>Order create date → Manifest Create Date</b>. Target = 48 hours. Cancelled orders are excluded.</div>
+    </div>
+    <div class="sla-target">Target <b>48 Hours</b></div>
+  </div>
+
+  <div class="kpis sla-kpis" id="manifestKpis"></div>
+
+  <div class="filters">
+    <div class="field">Warehouse<select id="manifestWarehouse"><option value="">All Warehouses</option></select></div>
+    <div class="field">Finance Category<select id="manifestChannel"><option value="">All Finance Categories</option></select></div>
+    <div class="field">SLA Status<select id="manifestStatus"><option value="">All SLA Status</option></select></div>
+    <div class="field">From Date<input id="manifestFrom" type="date"></div>
+    <div class="field">To Date<input id="manifestTo" type="date"></div>
+    <button onclick="clearManifestFilters()">Clear Filters</button>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <div class="section-title">Manifest SLA Status</div>
+      <div id="manifestStatusChart" class="hbars"></div>
+    </section>
+    <section class="card">
+      <div class="section-title">Warehouse-wise Manifest SLA</div>
+      <div id="manifestWarehouseChart" class="hbars"></div>
+    </section>
+    <section class="card">
+      <div class="section-title">WH Remarks — Breached Orders</div>
+      <div id="remarksChart" class="hbars"></div>
+      <div class="note" style="margin-top:10px">This summary uses <b>WH remarks</b> only for orders that breached the 48H Manifest SLA.</div>
+    </section>
+    <section class="card">
+      <div class="section-title">Manifest SLA Rules</div>
+      <div class="sla-rules">
+        <div><span class="dot green-dot"></span><b>Within SLA</b> — manifest created in ≤ 48 hours</div>
+        <div><span class="dot red-dot"></span><b>Breached</b> — manifest created after 48 hours or still open after 48 hours</div>
+        <div><span class="dot amber-dot"></span><b>At Risk</b> — no manifest yet and due within the next 6 hours</div>
+      </div>
+    </section>
+  </div>
+
+  <section class="table-card">
+    <div class="section-title">48H Manifest SLA Order Details</div>
+    <div class="note" id="manifestNote"></div>
+    <div class="table-wrap"><table><thead id="manifestThead"></thead><tbody id="manifestTbody"></tbody></table></div>
+  </section>
+
+  <section class="table-card">
+    <div class="section-title">WH Remarks Summary — Breached Orders</div>
+    <div class="table-wrap"><table><thead><tr><th>WH Remarks</th><th>Breached Orders</th><th>% of Breached</th></tr></thead><tbody id="remarksTbody"></tbody></table></div>
+  </section>
+
+</main>
+
+<script>
+let raw = [];
+let current = [];
+
+const preferred = ["Order No","Order create date","SKU","SKU Desc","Status","Order Qty","Picked Qty","Shipped Qty","Open Qty","FulfillmentLocationName","finance_category","Order Type","Pick Date","Pack Date","Actual_ShipDate","Delivery Date","AWB No.","Shipment status","Transporter"];
+
+function num(v) {
+  if (typeof v === "number") return isFinite(v) ? v : 0;
+  const n = parseFloat(String(v).replace(/,/g,""));
+  return isFinite(n) ? n : 0;
+}
+function unique(arr) { return [...new Set(arr.filter(v => v !== "" && v != null).map(String))].sort((a,b)=>a.localeCompare(b)); }
+function get(row, names) { for (const n of names) if (Object.prototype.hasOwnProperty.call(row,n)) return row[n]; return ""; }
+
+function orderLevel(rows) {
+  const seen = new Map();
+  rows.forEach(r => {
+    const id = String(get(r,["Order No"]));
+    if (!seen.has(id)) seen.set(id,r);
+  });
+  return [...seen.values()];
+}
+
+function fillSelect(id, values, label) {
+  const el=document.getElementById(id), old=el.value;
+  el.innerHTML=`<option value="">${label}</option>`+unique(values).map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+  if (unique(values).includes(old)) el.value=old;
+}
+function esc(v) { return String(v).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
+
+function populateFilters() {
+  fillSelect("warehouse",raw.map(r=>get(r,["FulfillmentLocationName"])),"All Warehouses");
+  fillSelect("channel",raw.map(r=>get(r,["finance_category","Finance Category"])),"All Finance Categories");
+  fillSelect("status",raw.map(r=>get(r,["Status"])),"All Status");
+  fillSelect("orderType",raw.map(r=>get(r,["Order Type"])),"All Order Types");
+}
+
+function applyFilters() {
+  const w=document.getElementById("warehouse").value, c=document.getElementById("channel").value;
+  const s=document.getElementById("status").value, o=document.getElementById("orderType").value;
+  const f=document.getElementById("fromDate").value, t=document.getElementById("toDate").value;
+  current=raw.filter(r=>{
+    if(w && String(get(r,["FulfillmentLocationName"]))!==w) return false;
+    if(c && String(get(r,["finance_category","Finance Category"]))!==c) return false;
+    if(s && String(get(r,["Status"]))!==s) return false;
+    if(o && String(get(r,["Order Type"]))!==o) return false;
+    const d=String(get(r,["Order create date","OrderDate"])).slice(0,10);
+    if(f && d<f) return false;
+    if(t && d>t) return false;
+    return true;
+  });
+  render();
+}
+
+function counts(rows, field) {
+  const m={};
+  rows.forEach(r=>{const k=String(get(r,[field])||"Blank");m[k]=(m[k]||0)+1;});
+  return Object.entries(m).sort((a,b)=>b[1]-a[1]);
+}
+
+function hbar(id,title,data) {
+  const el=document.getElementById(id);
+  if(!data.length) {el.innerHTML="<div class='note'>No data</div>";return;}
+  const max=Math.max(...data.map(x=>x[1]))||1;
+  el.innerHTML=data.slice(0,10).map(([k,v])=>`<div class="row"><div title="${esc(k)}">${esc(k)}</div><div class="track"><div class="fill" style="width:${Math.max(3,v/max*100)}%"></div></div><strong>${v.toLocaleString()}</strong></div>`).join("");
+}
+
+function dayChart(rows) {
+  const m={};
+  rows.forEach(r=>{const d=String(get(r,["Order create date","OrderDate"])).slice(0,10); if(d) m[d]=(m[d]||0)+1;});
+  const a=Object.entries(m).sort((x,y)=>x[0].localeCompare(y[0])).slice(-14);
+  const max=Math.max(...a.map(x=>x[1]),1);
+  document.getElementById("dayChart").innerHTML=a.length?a.map(([d,v])=>`<div class="bar"><em>${v}</em><i style="height:${Math.max(2,v/max*190)}px"></i><span>${esc(d.slice(5))}</span></div>`).join(""):"<div class='note'>No data</div>";
+}
+
+function render() {
+  const orders=orderLevel(current);
+  const totalQty=current.reduce((s,r)=>s+num(get(r,["Order Qty"])),0);
+  const picked=current.reduce((s,r)=>s+num(get(r,["Picked Qty"])),0);
+  const shipped=current.reduce((s,r)=>s+num(get(r,["Shipped Qty"])),0);
+  const open=current.reduce((s,r)=>s+num(get(r,["Open Qty"])),0);
+  const cancelled=orders.filter(r=>String(get(r,["Status"])).toLowerCase()==="cancelled").length;
+
+  const cards=[
+    ["Unique Orders",orders.length],["Total Order Qty",totalQty],["Picked Qty",picked],
+    ["Shipped Qty",shipped],["Open Qty",open],["Cancelled Orders",cancelled]
+  ];
+  document.getElementById("kpis").innerHTML=cards.map(([k,v])=>`<div class="kpi"><small>${k}</small><strong>${Number(v).toLocaleString()}</strong></div>`).join("");
+
+  hbar("statusChart","",counts(orders,"Status"));
+  hbar("warehouseChart","",counts(orders,"FulfillmentLocationName"));
+  hbar("channelChart","",counts(orders,"finance_category"));
+  dayChart(orders);
+
+  const cols=preferred.filter(c=>current.length && Object.prototype.hasOwnProperty.call(current[0],c));
+  document.getElementById("thead").innerHTML="<tr>"+cols.map(c=>`<th>${esc(c)}</th>`).join("")+"</tr>";
+  document.getElementById("tbody").innerHTML=orders.map(r=>"<tr>"+cols.map(c=>`<td>${c==="Status"?`<span class="status">${esc(r[c])}</span>`:esc(r[c])}</td>`).join("")+"</tr>").join("");
+  document.getElementById("rowNote").textContent=`Showing ${orders.length.toLocaleString()} unique orders from ${current.length.toLocaleString()} report rows. Quantity KPIs use all filtered report rows.`;
+}
+
+["warehouse","channel","status","orderType","fromDate","toDate"].forEach(id=>document.getElementById(id).addEventListener("change",applyFilters));
+
+function clearFilters() {
+  ["warehouse","channel","status","orderType"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("fromDate").value="";document.getElementById("toDate").value="";
+  applyFilters();
+}
+function resetAll(){ loadCentralExcel(); }
+
+
+async function loadCentralExcel(){
+  try{
+    const response = await fetch("data.xlsx?ts="+Date.now(), {cache:"no-store"});
+    if(!response.ok) throw new Error("data.xlsx not found");
+    const buffer = await response.arrayBuffer();
+    const wb = XLSX.read(buffer,{type:"array",cellDates:true});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    raw = XLSX.utils.sheet_to_json(ws,{defval:""});
+    raw = raw.map(r=>{
+      const x={};
+      Object.keys(r).forEach(k=>{
+        let v=r[k];
+        if(v instanceof Date) v=v.toISOString().slice(0,10);
+        x[String(k).trim()]=v;
+      });
+      return x;
+    });
+    populateFilters();
+    clearFilters();
+    initSlaFilters();
+    applySlaFilters();
+    initManifestFilters();
+    applyManifestFilters();
+    document.getElementById("sourceText").textContent =
+      `Latest central Vinculum report • ${raw.length.toLocaleString()} report rows • data.xlsx`;
+  }catch(err){
+    document.getElementById("sourceText").textContent =
+      "Central data.xlsx load failed — use Upload Vinculum Excel";
+    populateFilters();
+    render();
+  }
+}
+
+document.getElementById("file").addEventListener("change",e=>{
+  const file=e.target.files[0]; if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const wb=XLSX.read(ev.target.result,{type:"array",cellDates:true});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      raw=XLSX.utils.sheet_to_json(ws,{defval:""});
+      // Normalize Excel dates to YYYY-MM-DD where applicable
+      raw=raw.map(r=>{
+        const x={}; Object.keys(r).forEach(k=>{
+          let v=r[k];
+          if(v instanceof Date) v=v.toISOString().slice(0,10);
+          x[String(k).trim()]=v;
+        }); return x;
+      });
+      populateFilters(); clearFilters();
+      initSlaFilters(); applySlaFilters();
+      initManifestFilters(); applyManifestFilters();
+      document.getElementById("sourceText").textContent=`Loaded: ${file.name} • ${raw.length.toLocaleString()} report rows`;
+    }catch(err){alert("Excel read nahi ho payi: "+err.message);}
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+populateFilters(); render();
+
+let slaCurrent = [];
+
+function parseSlaDate(v){
+  if(v === null || v === undefined || v === "") return null;
+  const d = new Date(String(v).trim().replace(/\./g,""));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function buildSlaRows(){
+  const now = new Date();
+  const orders = orderLevel(raw);
+
+  return orders.map(r => {
+    const orderDate = parseSlaDate(get(r,["Order create date","OrderDate"]));
+    const shipDate = parseSlaDate(get(r,["Actual_ShipDate","Actual_ShipDate "]));
+    const isCancelled = String(get(r,["Status"])).toLowerCase().trim() === "cancelled";
+
+    if(isCancelled){
+      return {
+        ...r,
+        _sla:"Cancelled",
+        _hours:null,
+        _due:orderDate ? new Date(orderDate.getTime()+48*3600000) : null,
+        _slaMilestone:"Cancelled"
+      };
+    }
+
+    if(!orderDate){
+      return {...r,_sla:"No Order Create Date",_hours:null,_due:null,_slaMilestone:""};
+    }
+
+    const due = new Date(orderDate.getTime()+48*3600000);
+
+    // TAB 2 BUSINESS RULE:
+    // Order create date -> Actual_ShipDate ONLY.
+    // Manifest Create Date is NOT used in this SLA calculation.
+    const end = shipDate || now;
+    const hours = (end-orderDate)/3600000;
+
+    let status;
+    if(shipDate) status = hours <= 48 ? "Within SLA" : "Breached";
+    else status = hours > 48 ? "Breached" : (hours >= 42 ? "At Risk" : "Open");
+
+    return {
+      ...r,
+      _sla:status,
+      _hours:hours,
+      _due:due,
+      _slaMilestone:shipDate ? "Actual_ShipDate" : "Open"
+    };
+  });
+}
+
+function initSlaFilters(){
+  const rows=buildSlaRows();
+  slaFill("slaWarehouse",rows.map(r=>get(r,["FulfillmentLocationName"])),"All Warehouses");
+  slaFill("slaChannel",rows.map(r=>get(r,["finance_category","Finance Category"])),"All Finance Categories");
+  slaFill("slaStatus",rows.map(r=>r._sla),"All SLA Status");
+}
+
+function slaFill(id,values,label){
+  const el=document.getElementById(id), old=el.value, vals=unique(values);
+  el.innerHTML=`<option value="">${label}</option>`+vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+  if(vals.includes(old)) el.value=old;
+}
+
+function applySlaFilters(){
+  const w=document.getElementById("slaWarehouse").value;
+  const c=document.getElementById("slaChannel").value;
+  const s=document.getElementById("slaStatus").value;
+  const f=document.getElementById("slaFrom").value;
+  const t=document.getElementById("slaTo").value;
+
+  slaCurrent=buildSlaRows().filter(r=>{
+    if(w && String(get(r,["FulfillmentLocationName"]))!==w) return false;
+    if(c && String(get(r,["finance_category","Finance Category"]))!==c) return false;
+    if(s && r._sla!==s) return false;
+    const d=String(get(r,["Order create date"])).slice(0,10);
+    if(f && d<f) return false;
+    if(t && d>t) return false;
+    return true;
+  });
+  renderSla();
+}
+
+function renderSla(){
+  const rows=slaCurrent;
+  const total=rows.length;
+  const within=rows.filter(r=>r._sla==="Within SLA").length;
+  const breached=rows.filter(r=>r._sla==="Breached").length;
+  const risk=rows.filter(r=>r._sla==="At Risk").length;
+  const open=rows.filter(r=>r._sla==="Open").length;
+  const cancelled=rows.filter(r=>r._sla==="Cancelled").length;
+  const noDate=rows.filter(r=>r._sla==="No Order Create Date").length;
+  const measured=within+breached;
+  const pct=measured ? within/measured*100 : 0;
+
+  const totalPct = total ? 100 : 0;
+  const withinPct = total ? within/total*100 : 0;
+  const breachedPct = total ? breached/total*100 : 0;
+  const riskPct = total ? risk/total*100 : 0;
+  const openPct = total ? open/total*100 : 0;
+
+  const cancelledPct = total ? cancelled/total*100 : 0;
+  const noDatePct = total ? noDate/total*100 : 0;
+
+  const cards=[
+    ["All Orders",total,totalPct,""],
+    ["Within SLA",within,withinPct,"sla-kpi-good"],
+    ["SLA %",pct,null,"sla-kpi-good"],
+    ["Breached",breached,breachedPct,"sla-kpi-bad"],
+    ["At Risk",risk,riskPct,"sla-kpi-risk"],
+    ["Open < 48H",open,openPct,""],
+    ["Cancelled",cancelled,cancelledPct,""],
+    ["No Create Date",noDate,noDatePct,"sla-kpi-bad"]
+  ];
+  document.getElementById("slaKpis").innerHTML=cards.map(([k,v,p,cl])=>
+    `<div class="kpi ${cl}"><small>${k}</small><strong>${typeof v==="number"?v.toLocaleString():v}</strong>${p!==null?`<span class="kpi-pct">${p.toFixed(1)}% of SLA orders</span>`:""}</div>`).join("");
+
+  const statusData={};
+  rows.forEach(r=>statusData[r._sla]=(statusData[r._sla]||0)+1);
+  const shipStatusPairs=Object.entries(statusData).sort((a,b)=>b[1]-a[1]);
+  hbar("slaStatusChart","",shipStatusPairs);
+  document.getElementById("slaStatusChart").insertAdjacentHTML("afterbegin",
+    `<div class="note">Percent of SLA orders: ${shipStatusPairs.map(([k,v])=>`${esc(k)} ${total?((v/total)*100).toFixed(1):"0.0"}%`).join(" • ")}</div>`);
+  const shipWhPairs=counts(rows,"FulfillmentLocationName");
+  hbar("slaWarehouseChart","",shipWhPairs);
+  const shipWhTotal=shipWhPairs.reduce((s,x)=>s+x[1],0);
+  document.getElementById("slaWarehouseChart").insertAdjacentHTML("afterbegin",
+    `<div class="note">Warehouse share: ${shipWhPairs.map(([k,v])=>`${esc(k)} ${shipWhTotal?((v/shipWhTotal)*100).toFixed(1):"0.0"}%`).join(" • ")}</div>`);
+
+  const daily={};
+  rows.forEach(r=>{
+    const d=String(get(r,["Order create date"])).slice(0,10);
+    if(!d)return;
+    if(!daily[d])daily[d]={ok:0,total:0};
+    daily[d].total++;
+    if(r._sla==="Within SLA")daily[d].ok++;
+  });
+  const days=Object.entries(daily).sort((a,b)=>a[0].localeCompare(b[0])).slice(-14);
+  document.getElementById("slaDayChart").innerHTML=days.length ? days.map(([d,x])=>{
+    const p=x.total ? x.ok/x.total*100 : 0;
+    return `<div class="bar"><em>${p.toFixed(0)}%</em><i style="height:${Math.max(2,p/100*190)}px"></i><span>${esc(d.slice(5))}</span></div>`;
+  }).join("") : "<div class='note'>No data</div>";
+
+  const slaBreachedRows=rows.filter(r=>r._sla==="Breached");
+  const slaRemarks={};
+  slaBreachedRows.forEach(r=>{
+    const remark=String(get(r,["WH remarks","WH Remarks","WH remarks "]) ?? "").trim() || "Blank / No Remarks";
+    slaRemarks[remark]=(slaRemarks[remark]||0)+1;
+  });
+  const slaRemarkPairs=Object.entries(slaRemarks).sort((a,b)=>b[1]-a[1]);
+  const slaRemarksBody=document.getElementById("slaRemarksTbody");
+  if(slaRemarksBody){
+    slaRemarksBody.innerHTML=slaRemarkPairs.length
+      ? slaRemarkPairs.map(([remark,count])=>`<tr><td>${esc(remark)}</td><td>${count.toLocaleString()}</td><td>${breached?((count/breached)*100).toFixed(1):"0.0"}%</td></tr>`).join("")
+      : `<tr><td colspan="3">No breached orders in the selected filters.</td></tr>`;
+  }
+
+  const cols=["Order No","Order create date","Status","FulfillmentLocationName","finance_category","Order Qty","Manifest Create Date","Actual_ShipDate","WH remarks"];
+  document.getElementById("slaThead").innerHTML="<tr>"+cols.map(c=>`<th>${esc(c)}</th>`).join("")+"<th>SLA Status</th><th>Hours Taken</th><th>SLA Due</th><th>Milestone Used</th></tr>";
+
+  document.getElementById("slaTbody").innerHTML=rows.map(r=>{
+    const due=r._due ? r._due.toLocaleString() : "";
+    const hrs=r._hours!=null ? r._hours.toFixed(1) : "";
+    const cls=r._sla==="Within SLA"?"sla-good":r._sla==="Breached"?"sla-bad":r._sla==="At Risk"?"sla-risk":"";
+    return "<tr>"+cols.map(c=>`<td>${esc(r[c]??"")}</td>`).join("")+
+      `<td class="${cls}">${esc(r._sla)}</td><td>${hrs}</td><td>${esc(due)}</td><td>${esc(r._slaMilestone)}</td></tr>`;
+  }).join("");
+
+  document.getElementById("slaNote").textContent =
+    `${total.toLocaleString()} unique orders • SLA = Order create date → Actual_ShipDate • target 48 hours. Manifest Create Date is used only in the separate Manifest tab. Open orders use current browser time.`;
+}
+
+function clearSlaFilters(){
+  ["slaWarehouse","slaChannel","slaStatus"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("slaFrom").value="";
+  document.getElementById("slaTo").value="";
+  applySlaFilters();
+}
+
+document.querySelectorAll(".tab").forEach(btn=>btn.addEventListener("click",()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+  document.querySelectorAll(".tab-panel").forEach(x=>x.classList.remove("active-panel"));
+  btn.classList.add("active");
+  document.getElementById(btn.dataset.tab).classList.add("active-panel");
+  if(btn.dataset.tab==="slaTab"){
+    initSlaFilters();
+    applySlaFilters();
+  }
+}));
+
+["slaWarehouse","slaChannel","slaStatus","slaFrom","slaTo"].forEach(id=>
+  document.getElementById(id).addEventListener("change",applySlaFilters)
+);
+
+// After a new Vinculum Excel is uploaded, refresh SLA controls too.
+document.getElementById("file").addEventListener("change",()=>{
+  setTimeout(()=>{initSlaFilters();applySlaFilters();},150);
+});
+
+initSlaFilters();
+applySlaFilters();
+
+
+let manifestCurrent = [];
+
+function buildManifestRows(){
+  const now = new Date();
+  const orders = orderLevel(raw);
+  return orders.map(r => {
+    const status = String(get(r,["Status"])).trim().toLowerCase();
+    const orderDate = parseSlaDate(get(r,["Order create date","OrderDate"]));
+    const manifestDate = parseSlaDate(get(r,["Manifest Create Date","Manifest Create Date "]));
+    const remarks = String(get(r,["WH remarks","WH Remarks","WH remarks "]) ?? "").trim() || "Blank / No Remarks";
+
+    if(status === "cancelled") return {...r,_manifestSla:"Cancelled",_manifestHours:null,_manifestDue:orderDate?new Date(orderDate.getTime()+48*3600000):null,_whRemarks:remarks};
+    if(!orderDate) return {...r,_manifestSla:"No Order Create Date",_manifestHours:null,_manifestDue:null,_whRemarks:remarks};
+
+    const due = new Date(orderDate.getTime()+48*3600000);
+    const end = manifestDate || now;
+    const hours = (end-orderDate)/3600000;
+    const slaStatus = manifestDate ? (hours<=48 ? "Within SLA" : "Breached") : (hours>48 ? "Breached" : (hours>=42 ? "At Risk" : "Open"));
+    return {...r,_manifestSla:slaStatus,_manifestHours:hours,_manifestDue:due,_whRemarks:remarks};
+  });
+}
+
+function fillManifestSelect(id,values,label){
+  const el=document.getElementById(id), old=el.value, vals=unique(values);
+  el.innerHTML=`<option value="">${label}</option>`+vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+  if(vals.includes(old)) el.value=old;
+}
+
+function initManifestFilters(){
+  const rows=buildManifestRows();
+  fillManifestSelect("manifestWarehouse",rows.map(r=>get(r,["FulfillmentLocationName"])),"All Warehouses");
+  fillManifestSelect("manifestChannel",rows.map(r=>get(r,["finance_category","Finance Category"])),"All Finance Categories");
+  fillManifestSelect("manifestStatus",rows.map(r=>r._manifestSla),"All SLA Status");
+}
+
+function applyManifestFilters(){
+  const w=document.getElementById("manifestWarehouse").value;
+  const c=document.getElementById("manifestChannel").value;
+  const s=document.getElementById("manifestStatus").value;
+  const f=document.getElementById("manifestFrom").value;
+  const t=document.getElementById("manifestTo").value;
+
+  manifestCurrent=buildManifestRows().filter(r=>{
+    if(w && String(get(r,["FulfillmentLocationName"]))!==w) return false;
+    if(c && String(get(r,["finance_category","Finance Category"]))!==c) return false;
+    if(s && r._manifestSla!==s) return false;
+    const d=String(get(r,["Order create date","OrderDate"])).slice(0,10);
+    if(f && d<f) return false;
+    if(t && d>t) return false;
+    return true;
+  });
+  renderManifestSla();
+}
+
+function renderManifestSla(){
+  const rows=manifestCurrent;
+  const total=rows.length;
+  const within=rows.filter(r=>r._manifestSla==="Within SLA").length;
+  const breachedRows=rows.filter(r=>r._manifestSla==="Breached");
+  const breached=breachedRows.length;
+  const risk=rows.filter(r=>r._manifestSla==="At Risk").length;
+  const open=rows.filter(r=>r._manifestSla==="Open").length;
+  const measured=within+breached;
+  const pct=measured ? within/measured*100 : 0;
+
+  const totalPct = total ? 100 : 0;
+  const withinPct = total ? within/total*100 : 0;
+  const breachedPct = total ? breached/total*100 : 0;
+  const riskPct = total ? risk/total*100 : 0;
+  const openPct = total ? open/total*100 : 0;
+
+  const cards=[
+    ["Manifest SLA Orders",total,totalPct,""],
+    ["Within SLA",within,withinPct,"sla-kpi-good"],
+    ["Manifest SLA %",pct,null,"sla-kpi-good"],
+    ["Breached",breached,breachedPct,"sla-kpi-bad"],
+    ["At Risk",risk,riskPct,"sla-kpi-risk"],
+    ["Open < 48H",open,openPct,""]
+  ];
+  document.getElementById("manifestKpis").innerHTML=cards.map(([k,v,p,cl])=>
+    `<div class="kpi ${cl}"><small>${k}</small><strong>${typeof v==="number"?v.toLocaleString():v}</strong>${p!==null?`<span class="kpi-pct">${p.toFixed(1)}% of SLA orders</span>`:""}</div>`).join("");
+
+  const statusData={};
+  rows.forEach(r=>statusData[r._manifestSla]=(statusData[r._manifestSla]||0)+1);
+  const manifestStatusPairs=Object.entries(statusData).sort((a,b)=>b[1]-a[1]);
+  hbar("manifestStatusChart","",manifestStatusPairs);
+  document.getElementById("manifestStatusChart").insertAdjacentHTML("afterbegin",
+    `<div class="note">Percent of manifest SLA orders: ${manifestStatusPairs.map(([k,v])=>`${esc(k)} ${total?((v/total)*100).toFixed(1):"0.0"}%`).join(" • ")}</div>`);
+  const manifestWhPairs=counts(rows,"FulfillmentLocationName");
+  hbar("manifestWarehouseChart","",manifestWhPairs);
+  const manifestWhTotal=manifestWhPairs.reduce((s,x)=>s+x[1],0);
+  document.getElementById("manifestWarehouseChart").insertAdjacentHTML("afterbegin",
+    `<div class="note">Warehouse share: ${manifestWhPairs.map(([k,v])=>`${esc(k)} ${manifestWhTotal?((v/manifestWhTotal)*100).toFixed(1):"0.0"}%`).join(" • ")}</div>`);
+
+  const remarks={};
+  breachedRows.forEach(r=>remarks[r._whRemarks]=(remarks[r._whRemarks]||0)+1);
+  const remarkPairs=Object.entries(remarks).sort((a,b)=>b[1]-a[1]);
+  hbar("remarksChart","",remarkPairs);
+
+  document.getElementById("remarksTbody").innerHTML = remarkPairs.length
+    ? remarkPairs.map(([remark,count])=>`<tr><td>${esc(remark)}</td><td>${count.toLocaleString()}</td><td>${breached?((count/breached)*100).toFixed(1):"0.0"}%</td></tr>`).join("")
+    : `<tr><td colspan="3">No breached orders in the selected filters.</td></tr>`;
+
+  const cols=["Order No","Order create date","Status","FulfillmentLocationName","finance_category","Order Qty","Manifest Create Date","WH remarks"];
+  document.getElementById("manifestThead").innerHTML="<tr>"+cols.map(c=>`<th>${esc(c)}</th>`).join("")+
+    "<th>Manifest SLA</th><th>Hours Taken</th><th>SLA Due</th></tr>";
+
+  document.getElementById("manifestTbody").innerHTML=rows.map(r=>{
+    const due=r._manifestDue?r._manifestDue.toLocaleString():"";
+    const hrs=r._manifestHours!=null?r._manifestHours.toFixed(1):"";
+    const cls=r._manifestSla==="Within SLA"?"sla-good":r._manifestSla==="Breached"?"sla-bad":r._manifestSla==="At Risk"?"sla-risk":"";
+    return "<tr>"+cols.map(c=>`<td>${esc(r[c]??"")}</td>`).join("")+
+      `<td class="${cls}">${esc(r._manifestSla)}</td><td>${hrs}</td><td>${esc(due)}</td></tr>`;
+  }).join("");
+
+  document.getElementById("manifestNote").textContent =
+    `${total.toLocaleString()} unique orders • Manifest SLA = Order create date → Manifest Create Date • target 48 hours. Open orders use current browser time.`;
+}
+
+function clearManifestFilters(){
+  ["manifestWarehouse","manifestChannel","manifestStatus"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("manifestFrom").value="";
+  document.getElementById("manifestTo").value="";
+  applyManifestFilters();
+}
+
+document.querySelectorAll(".tab").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    if(btn.dataset.tab==="manifestSlaTab"){
+      initManifestFilters();
+      applyManifestFilters();
+    }
+  });
+});
+["manifestWarehouse","manifestChannel","manifestStatus","manifestFrom","manifestTo"].forEach(id=>
+  document.getElementById(id).addEventListener("change",applyManifestFilters)
+);
+
+loadCentralExcel();
+
+</script>
+</body>
+</html>
