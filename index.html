@@ -220,11 +220,51 @@ function unique(arr) { return [...new Set(arr.filter(v => v !== "" && v != null)
 function get(row, names) { for (const n of names) if (Object.prototype.hasOwnProperty.call(row,n)) return row[n]; return ""; }
 
 function orderLevel(rows) {
+  // Keep EXACTLY the same order population for all 3 tabs.
+  // One Order No = one dashboard order, but merge information from
+  // all report rows so dates such as Order create / Manifest / Ship
+  // are not lost when the first SKU row is blank.
   const seen = new Map();
-  rows.forEach(r => {
-    const id = String(get(r,["Order No"]));
-    if (!seen.has(id)) seen.set(id,r);
+
+  rows.forEach((r, idx) => {
+    const rawId = get(r,["Order No"]);
+    const id = String(rawId ?? "").trim() || `__ROW_${idx}`;
+
+    if (!seen.has(id)) {
+      seen.set(id, {...r});
+      return;
+    }
+
+    const target = seen.get(id);
+
+    Object.keys(r).forEach(k => {
+      const incoming = r[k];
+      const existing = target[k];
+
+      // Fill blank fields from another row of the same order.
+      if ((existing === "" || existing === null || existing === undefined) &&
+          incoming !== "" && incoming !== null && incoming !== undefined) {
+        target[k] = incoming;
+      }
+    });
+
+    // For milestone/date fields, keep the earliest valid date found
+    // across all rows belonging to this order.
+    [
+      ["Order create date","OrderDate"],
+      ["Manifest Create Date","Manifest Create Date "],
+      ["Actual_ShipDate","Actual_ShipDate "]
+    ].forEach(names => {
+      const currentDate = parseSlaDate(target[names[0]] ?? target[names[1]]);
+      const incomingDate = parseSlaDate(r[names[0]] ?? r[names[1]]);
+      if (!currentDate && incomingDate) {
+        target[names[0]] = r[names[0]] ?? r[names[1]];
+      } else if (currentDate && incomingDate && incomingDate < currentDate) {
+        target[names[0]] = r[names[0]] ?? r[names[1]];
+      }
+    });
   });
+
   return [...seen.values()];
 }
 
@@ -379,7 +419,33 @@ let slaCurrent = [];
 
 function parseSlaDate(v){
   if(v === null || v === undefined || v === "") return null;
-  const d = new Date(String(v).trim().replace(/\./g,""));
+
+  // Excel serial date fallback.
+  if(typeof v === "number" && isFinite(v)){
+    const d = XLSX.SSF.parse_date_code(v);
+    if(d){
+      return new Date(d.y, d.m - 1, d.d, d.H || 0, d.M || 0, d.S || 0);
+    }
+  }
+
+  const s = String(v).trim().replace(/\./g,"");
+  if(!s) return null;
+
+  // YYYY-MM-DD (including timestamps)
+  let m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+  if(m){
+    const d = new Date(Number(m[1]), Number(m[2])-1, Number(m[3]));
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // DD/MM/YYYY or DD-MM-YYYY
+  m = s.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+  if(m){
+    const d = new Date(Number(m[3]), Number(m[2])-1, Number(m[1]));
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  const d = new Date(s);
   return isNaN(d.getTime()) ? null : d;
 }
 
@@ -469,6 +535,8 @@ function renderSla(){
   const open=rows.filter(r=>r._sla==="Open").length;
   const cancelled=rows.filter(r=>r._sla==="Cancelled").length;
   const noDate=rows.filter(r=>r._sla==="No Order Create Date").length;
+  // SLA % = Within SLA / (Within SLA + Breached).
+  // At Risk/Open are still shown separately and do not count as measured.
   const measured=within+breached;
   const pct=measured ? within/measured*100 : 0;
 
@@ -546,7 +614,7 @@ function renderSla(){
   }).join("");
 
   document.getElementById("slaNote").textContent =
-    `${total.toLocaleString()} unique orders • SLA = Order create date → Actual_ShipDate • target 48 hours. Manifest Create Date is used only in the separate Manifest tab. Open orders use current browser time.`;
+    `${total.toLocaleString()} unique orders • same order population as Order Fulfillment • SLA = Order create date → Actual_ShipDate • target 48 hours. Manifest Create Date is used only in the separate Manifest tab. Open orders use current browser time.`;
 }
 
 function clearSlaFilters(){
@@ -642,6 +710,8 @@ function renderManifestSla(){
   const breached=breachedRows.length;
   const risk=rows.filter(r=>r._manifestSla==="At Risk").length;
   const open=rows.filter(r=>r._manifestSla==="Open").length;
+  // SLA % = Within SLA / (Within SLA + Breached).
+  // At Risk/Open are still shown separately and do not count as measured.
   const measured=within+breached;
   const pct=measured ? within/measured*100 : 0;
 
@@ -696,7 +766,7 @@ function renderManifestSla(){
   }).join("");
 
   document.getElementById("manifestNote").textContent =
-    `${total.toLocaleString()} unique orders • Manifest SLA = Order create date → Manifest Create Date • target 48 hours. Open orders use current browser time.`;
+    `${total.toLocaleString()} unique orders • same order population as Order Fulfillment • Manifest SLA = Order create date → Manifest Create Date • target 48 hours. Open orders use current browser time.`;
 }
 
 function clearManifestFilters(){
