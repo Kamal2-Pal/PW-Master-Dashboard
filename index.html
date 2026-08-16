@@ -238,7 +238,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
     <div class="pill">Bin logic: SPR / MTR / GP B2B</div>
   </div>
 
-  <div class="note" id="pickerSourceLine" style="margin:8px 0 14px">Loaded from attached picker report</div>
+  <div class="note" id="pickerSourceLine" style="margin:8px 0 14px">Loaded from attached picker report • 2,492 report rows</div>
 
   <div class="cards" id="pickerCards"></div>
 
@@ -893,7 +893,20 @@ function pickerBinGroup(bin){
 function pickerNum(v){const n=Number(v); return Number.isFinite(n)?n:0}
 function parsePickerDate(v){
   if(!v) return null;
-  const d=new Date(String(v));
+  if(v instanceof Date && !isNaN(v.getTime())) return v;
+  const s=String(v).trim();
+  // Report format: DD/MM/YYYY HH:MM AM/PM
+  const m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?:\s*([AP]M))?)?$/i);
+  if(m){
+    let hh=m[4]?Number(m[4]):0;
+    const mm=m[5]?Number(m[5]):0;
+    const ap=(m[6]||"").toUpperCase();
+    if(ap==="PM" && hh<12) hh+=12;
+    if(ap==="AM" && hh===12) hh=0;
+    const d=new Date(Number(m[3]),Number(m[2])-1,Number(m[1]),hh,mm,0,0);
+    return isNaN(d.getTime())?null:d;
+  }
+  const d=new Date(s);
   return isNaN(d.getTime())?null:d;
 }
 function pickerFmt(n){return Number(n||0).toLocaleString("en-IN",{maximumFractionDigits:2})}
@@ -972,15 +985,15 @@ function populatePickerFilters(){
     el.innerHTML=`<option value="">${first}</option>`+[...vals].sort().map(v=>`<option value="${String(v).replace(/"/g,"&quot;")}">${v}</option>`).join("");
     if([...el.options].some(o=>o.value===old))el.value=old;
   };
-  fill("userFilter",new Set(pickerRows.map(r=>pickerNorm(pickerVal(r,"Pick User"))).filter(Boolean)),"All Pick Users");
-  fill("whFilter",new Set(pickerRows.map(r=>pickerNorm(pickerVal(r,"Source WH"))).filter(Boolean)),"All Warehouses");
+  // IMPORTANT: these IDs must match the actual Picker Report controls.
+  fill("pickerUserFilter",new Set(pickerRows.map(r=>pickerNorm(pickerVal(r,"Pick User"))).filter(Boolean)),"All Pick Users");
+  fill("pickerWhFilter",new Set(pickerRows.map(r=>pickerNorm(pickerVal(r,"Source WH"))).filter(Boolean)),"All Warehouses");
 }
 function loadPickerObjects(data,name){
   pickerRows=data;
   document.getElementById("pickerSourceLine").textContent=`Loaded: ${name} • ${pickerRows.length.toLocaleString()} report pickerRows`;
   populatePickerFilters(); renderPicker();
 }
-document.getElementById("pickerUploadBtn").onclick=()=>document.getElementById("pickerFileInput").click();
 document.getElementById("pickerFileInput").onchange=async e=>{
   const f=e.target.files[0]; if(!f)return;
   const ext=f.name.toLowerCase().split(".").pop();
@@ -1004,7 +1017,7 @@ document.getElementById("pickerFileInput").onchange=async e=>{
     loadPickerObjects(XLSX.utils.sheet_to_json(ws,{defval:""}),f.name);
   }
 };
-function resetPickerReport(){pickerRows=PICKER_INITIAL_DATA;document.getElementById("pickerSourceLine").textContent="Loaded from attached picker report";populatePickerFilters();document.getElementById("pickerDateFilter").value="";renderPicker();}
+function resetPickerReport(){pickerRows=PICKER_INITIAL_DATA;document.getElementById("pickerSourceLine").textContent=`Loaded from attached picker report • ${pickerRows.length.toLocaleString()} report rows`;populatePickerFilters();document.getElementById("pickerDateFilter").value="";renderPicker();}
 ["pickerUserFilter","pickerBinFilter","pickerWhFilter","pickerDateFilter"].forEach(id=>document.getElementById(id).addEventListener("change",renderPicker));
 populatePickerFilters();renderPicker();
 
