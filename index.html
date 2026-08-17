@@ -66,6 +66,14 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 .picker-scope .picker-kpi strong{display:block;font-size:27px;margin-top:8px}
 .picker-scope .panel{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:18px;margin-bottom:16px;overflow:hidden}
 .picker-scope .panel h3{margin:0 0 14px;font-size:18px}
+.picker-scope .summary-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:16px}
+.picker-scope .summary-card{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:15px}
+.picker-scope .summary-card small{display:block;color:#6b7785;text-transform:uppercase;font-weight:700;font-size:11px}
+.picker-scope .summary-card strong{display:block;font-size:24px;margin-top:7px}
+.coverage-strip{background:#eef5ff;color:#175ea8;border:1px solid #d9e8fb;border-radius:10px;padding:10px 14px;font-size:13px;font-weight:700;margin:0 0 16px}
+@media(max-width:1200px){.picker-scope .summary-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:650px){.picker-scope .summary-grid{grid-template-columns:repeat(2,1fr)}}
+
 .picker-scope .filters{background:#fff;border:0;padding:0;display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:0}
 .picker-scope .filters>div{display:flex;flex-direction:column;gap:6px;font-size:11px;color:#657281;font-weight:700;text-transform:uppercase}
 .picker-scope .filters select,.picker-scope .filters input{min-width:145px;padding:10px;border:1px solid #ccd5df;border-radius:7px;background:#fff;font-size:14px}
@@ -113,6 +121,12 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
    <button id="orderLiveRefreshBtn" type="button" onclick="refreshOrderLive()">↻ Refresh Order Data</button>
  </div>
  <div class="kpis" id="kpis"></div>
+ <div class="coverage-strip" id="orderCoverage">Order data coverage: calculating…</div>
+ <section class="card" style="margin-bottom:16px">
+   <div class="section-title">Yesterday Summary</div>
+   <div class="note" id="orderYesterdayNote">Yesterday = calculating from Order create date.</div>
+   <div class="kpis sla-kpis" id="orderYesterdayCards" style="grid-template-columns:repeat(5,1fr);margin-bottom:0"></div>
+ </section>
 
  <div class="note" style="margin:0 0 10px 4px">Order Fulfillment filters and daily reporting use <b>Order create date</b>. Channel dimension is <b>finance_category</b>.</div>
 <div class="filters">
@@ -265,6 +279,12 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 </div>
 
   <div class="picker-kpis" id="pickerCards"></div>
+  <div class="coverage-strip" id="pickerCoverage">Picker data coverage: calculating…</div>
+  <section class="panel">
+    <h3>Yesterday Summary</h3>
+    <div class="note" id="pickerYesterdayNote">Yesterday = calculating from Pick Date.</div>
+    <div class="summary-grid" id="pickerYesterdayCards"></div>
+  </section>
 
   <div class="panel">
     <h3>Filters</h3>
@@ -279,6 +299,12 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
   <div class="panel">
     <h3>Picker-wise Performance</h3>
     <div class="table-wrap"><table id="pickerTable"></table></div>
+  </div>
+
+  <div class="panel">
+    <h3>Picker-wise Order Summary</h3>
+    <div class="note">Each picker’s unique Order No. split by bin group: SPR, MTR and GP B2B.</div>
+    <div class="table-wrap"><table id="pickerOrderSummaryTable"></table></div>
   </div>
 
   <div class="panel">
@@ -408,7 +434,42 @@ function dayChart(rows) {
   document.getElementById("dayChart").innerHTML=a.length?a.map(([d,v])=>`<div class="bar"><em>${v}</em><i style="height:${Math.max(2,v/max*190)}px"></i><span>${esc(d.slice(5))}</span></div>`).join(""):"<div class='note'>No data</div>";
 }
 
+function localDateKey(v){
+  const d=parseSlaDate(v);
+  if(!d) return "";
+  return [d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");
+}
+function yesterdayKey(){
+  const d=new Date(); d.setDate(d.getDate()-1);
+  return [d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");
+}
+function formatDateKey(k){
+  if(!k) return "No date";
+  const [y,m,d]=k.split("-"); return `${d}/${m}/${y}`;
+}
+function dateRangeFromRows(rows, fieldNames){
+  const vals=rows.map(r=>localDateKey(get(r,fieldNames))).filter(Boolean).sort();
+  return vals.length ? {from:vals[0],to:vals[vals.length-1]} : null;
+}
+function renderOrderCoverageAndYesterday(){
+  const range=dateRangeFromRows(raw,["Order create date","OrderDate"]);
+  const cov=document.getElementById("orderCoverage");
+  cov.textContent=range ? `Order data coverage (Order create date): ${formatDateKey(range.from)} → ${formatDateKey(range.to)} • ${raw.length.toLocaleString()} report rows` : "Order data coverage: no valid Order create date found";
+  const y=yesterdayKey();
+  const yr=raw.filter(r=>localDateKey(get(r,["Order create date","OrderDate"]))===y);
+  const yo=orderLevel(yr);
+  const qty=yr.reduce((a,r)=>a+num(get(r,["Order Qty"])),0);
+  const picked=yr.reduce((a,r)=>a+num(get(r,["Picked Qty"])),0);
+  const shipped=yr.reduce((a,r)=>a+num(get(r,["Shipped Qty"])),0);
+  const open=yr.reduce((a,r)=>a+num(get(r,["Open Qty"])),0);
+  document.getElementById("orderYesterdayNote").textContent=`Yesterday (${formatDateKey(y)}) based on Order create date.`;
+  document.getElementById("orderYesterdayCards").innerHTML=[
+    ["Unique Orders",yo.length],["Order Qty",qty],["Picked Qty",picked],["Shipped Qty",shipped],["Open Qty",open]
+  ].map(([k,v])=>`<div class="kpi"><small>${k}</small><strong>${Number(v).toLocaleString()}</strong></div>`).join("");
+}
+
 function render() {
+  renderOrderCoverageAndYesterday();
   const orders=orderLevel(current);
   const totalQty=current.reduce((s,r)=>s+num(get(r,["Order Qty"])),0);
   const picked=current.reduce((s,r)=>s+num(get(r,["Picked Qty"])),0);
@@ -1080,6 +1141,28 @@ function aggregatePicker(data){
   });
   return [...out.values()].sort((a,b)=>a.user.localeCompare(b.user)||groups.indexOf(a.group)-groups.indexOf(b.group));
 }
+function pickerCoverageAndYesterday(){
+  const range=dateRangeFromRows(pickerRows,["Pick Date"]);
+  const cov=document.getElementById("pickerCoverage");
+  cov.textContent=range ? `Picker data coverage (Pick Date): ${formatDateKey(range.from)} → ${formatDateKey(range.to)} • ${pickerRows.length.toLocaleString()} report rows` : "Picker data coverage: no valid Pick Date found";
+  const y=yesterdayKey();
+  const yd=pickerRows.filter(r=>{
+    const d=parsePickerDate(pickerVal(r,"Pick Date"));
+    if(!d)return false;
+    const k=[d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");
+    return k===y;
+  });
+  const spr=yd.filter(r=>pickerBinGroup(pickerVal(r,"Bin"))==="SPR");
+  const mtr=yd.filter(r=>pickerBinGroup(pickerVal(r,"Bin"))==="MTR");
+  const gp=yd.filter(r=>pickerBinGroup(pickerVal(r,"Bin"))==="GP B2B");
+  const cards=[
+    ["Pick Users",pickerUniqueCount(yd,"Pick User")],["Unique Orders",pickerUniqueCount(yd,"Order No")],["Order Qty",yd.reduce((a,r)=>a+pickerNum(pickerVal(r,"Qty")),0)],
+    ["SPR Orders",pickerUniqueCount(spr,"Order No")],["MTR Orders",pickerUniqueCount(mtr,"Order No")],["GP B2B Orders",pickerUniqueCount(gp,"Order No")]
+  ];
+  document.getElementById("pickerYesterdayNote").textContent=`Yesterday (${formatDateKey(y)}) based on Pick Date.`;
+  document.getElementById("pickerYesterdayCards").innerHTML=cards.map(([k,v])=>`<div class="summary-card"><small>${k}</small><strong>${pickerFmt(v)}</strong></div>`).join("");
+}
+
 function renderPicker(){
   const user=document.getElementById("pickerUserFilter").value;
   const bin=document.getElementById("pickerBinFilter").value;
@@ -1104,6 +1187,8 @@ function renderPicker(){
     }
     return true;
   });
+
+  pickerCoverageAndYesterday();
 
   const users=pickerUniqueCount(data,"Pick User");
   const picklists=pickerUniqueCount(data,"Picklist No.");
@@ -1141,6 +1226,24 @@ function renderPicker(){
   });
   html+="</tbody>";
   document.getElementById("pickerTable").innerHTML=html;
+
+  // Dedicated order-wise summary: one row per picker, unique Order No split by bin group.
+  const orderByPicker=new Map();
+  data.forEach(r=>{
+    const user=pickerNorm(pickerVal(r,"Pick User")) || "(Blank Pick User)";
+    const ord=pickerNorm(pickerVal(r,"Order No"));
+    if(!ord)return;
+    const g=pickerBinGroup(pickerVal(r,"Bin"));
+    if(!orderByPicker.has(user)) orderByPicker.set(user,{SPR:new Set(),MTR:new Set(),"GP B2B":new Set()});
+    orderByPicker.get(user)[g].add(ord);
+  });
+  let orderHtml='<thead><tr><th>Pick User</th><th>SPR Orders</th><th>MTR Orders</th><th>GP B2B Orders</th><th>Total Unique Orders</th></tr></thead><tbody>';
+  [...orderByPicker.entries()].sort((a,b)=>a[0].localeCompare(b[0])).forEach(([user,z])=>{
+    const total=new Set([...z.SPR,...z.MTR,...z["GP B2B"]]).size;
+    orderHtml+=`<tr><td><b>${esc(user)}</b></td><td>${pickerFmt(z.SPR.size)}</td><td>${pickerFmt(z.MTR.size)}</td><td>${pickerFmt(z["GP B2B"].size)}</td><td><b>${pickerFmt(total)}</b></td></tr>`;
+  });
+  orderHtml+='</tbody>';
+  document.getElementById("pickerOrderSummaryTable").innerHTML=orderHtml;
 
   const bt=["SPR","MTR","GP B2B"].map(g=>{
     const d=data.filter(r=>pickerBinGroup(pickerVal(r,"Bin"))===g);
