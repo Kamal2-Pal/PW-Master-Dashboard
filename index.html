@@ -109,6 +109,9 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 
 <main class="wrap">
 <section id="ordersTab" class="tab-panel active-panel">
+ <div class="picker-actions" style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:12px">
+   <button id="orderLiveRefreshBtn" type="button" onclick="refreshOrderLive()">↻ Refresh Order Data</button>
+ </div>
  <div class="kpis" id="kpis"></div>
 
  <div class="note" style="margin:0 0 10px 4px">Order Fulfillment filters and daily reporting use <b>Order create date</b>. Channel dimension is <b>finance_category</b>.</div>
@@ -518,49 +521,87 @@ function loadCentralReportLocally(){
 }
 
 async function loadCentralExcel(){
-  // Browser upload is the first priority, so a refresh never falls back
-  // to stale data.xlsx after the user has selected a newer report.
-  if(loadCentralReportLocally()) return;
+  // LIVE GitHub Pages source: always try the published data.xlsx first.
+  // This prevents an older browser-local copy from hiding newer dashboard data.
   try{
-    const response = await fetch("data.xlsx?ts="+Date.now(), {cache:"no-store"});
-    if(!response.ok) throw new Error("data.xlsx not found");
+    const response = await fetch("data.xlsx?ts="+Date.now()+"-"+Math.random().toString(36).slice(2), {
+      cache:"no-store",
+      headers:{"Cache-Control":"no-cache"}
+    });
+    if(!response.ok) throw new Error("data.xlsx not found ("+response.status+")");
+
     const buffer = await response.arrayBuffer();
     const wb = XLSX.read(buffer,{type:"array",cellDates:true});
     const ws = wb.Sheets[wb.SheetNames[0]];
     raw = normalizeRows(XLSX.utils.sheet_to_json(ws,{defval:""}));
+    if(!raw.length) throw new Error("data.xlsx is empty");
+
     populateFilters();
     clearFilters();
     initSlaFilters();
     applySlaFilters();
     initManifestFilters();
     applyManifestFilters();
+
     const loadedAt = new Date();
-    const stamp = loadedAt.toLocaleString();
-    let metaText = `Loaded ${stamp}`;
+    let metaText = `Loaded ${loadedAt.toLocaleString()}`;
     try {
-      const metaRes = await fetch("data-meta.json?ts="+Date.now(), {cache:"no-store"});
+      const metaRes = await fetch("data-meta.json?ts="+Date.now()+"-"+Math.random().toString(36).slice(2), {
+        cache:"no-store",
+        headers:{"Cache-Control":"no-cache"}
+      });
       if (metaRes.ok) {
         const meta = await metaRes.json();
         const metaAt = new Date(meta.updatedAt || "");
-        if (!isNaN(metaAt.getTime())) {
-          metaText = `File updated ${metaAt.toLocaleString()}`;
-        }
+        if (!isNaN(metaAt.getTime())) metaText = `File updated ${metaAt.toLocaleString()}`;
         document.getElementById("sourceText").textContent =
-          `Latest Vinculum report • ${raw.length.toLocaleString()} report rows • ${meta.sourceFile || "data.xlsx"} • ${metaText}`;
+          `LIVE Vinculum report • ${raw.length.toLocaleString()} report rows • ${meta.sourceFile || "data.xlsx"} • ${metaText}`;
       } else {
         document.getElementById("sourceText").textContent =
-          `Latest Vinculum report • ${raw.length.toLocaleString()} report rows • data.xlsx • ${metaText}`;
+          `LIVE Vinculum report • ${raw.length.toLocaleString()} report rows • data.xlsx • ${metaText}`;
       }
     } catch(e) {
       document.getElementById("sourceText").textContent =
-        `Latest Vinculum report • ${raw.length.toLocaleString()} report rows • data.xlsx • ${metaText}`;
+        `LIVE Vinculum report • ${raw.length.toLocaleString()} report rows • data.xlsx • ${metaText}`;
     }
-    syncPickerFromMainUpload(raw,"data.xlsx");
+
+    // Picker remains on its own live GitHub CSV source.
+    loadLatestPickerFromGithub();
+    return true;
   }catch(err){
+    // If GitHub Pages is temporarily unavailable, keep the last local upload
+    // as a fallback rather than leaving the whole dashboard blank.
+    if(loadCentralReportLocally()) return true;
+
     document.getElementById("sourceText").textContent =
-      "Central report load failed — use Upload Vinculum Excel";
+      "LIVE central report unavailable — use Upload Vinculum Excel";
     populateFilters();
     render();
+    console.warn("Live central report unavailable:",err);
+    return false;
+  }
+}
+
+async function refreshOrderLive(){
+  const btn=document.getElementById("orderLiveRefreshBtn");
+  if(btn){
+    btn.disabled=true;
+    btn.textContent="↻ Refreshing…";
+  }
+
+  const source=document.getElementById("sourceText");
+  const previous=source ? source.textContent : "";
+  if(source) source.textContent="Refreshing LIVE Vinculum report…";
+
+  try{
+    const ok=await loadCentralExcel();
+    if(!ok && source && previous) source.textContent=previous;
+  }finally{
+    const b=document.getElementById("orderLiveRefreshBtn");
+    if(b){
+      b.disabled=false;
+      b.textContent="↻ Refresh Order Data";
+    }
   }
 }
 
