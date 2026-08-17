@@ -1602,17 +1602,63 @@ function offrollStatusClass(v){
   return s==="P"?"offroll-status-p":s==="N"?"offroll-status-n":s==="HD"?"offroll-status-hd":s==="L"?"offroll-status-l":"offroll-status-a";
 }
 
+function offrollCleanHeader(v){
+  // Google Sheets can expose invisible BOM / zero-width characters in a
+  // header cell. Normalize those so "DOJ" is reliably detected.
+  return String(v ?? "")
+    .replace(/[\uFEFF\u200B-\u200D\u2060]/g,"")
+    .replace(/\u00A0/g," ")
+    .trim()
+    .replace(/\s+/g," ");
+}
+
+function offrollCanonicalHeader(v){
+  const h=offrollCleanHeader(v);
+  const key=h.toLowerCase().replace(/[^a-z0-9]/g,"");
+  const aliases={
+    sno:"S.No.",
+    serialno:"S.No.",
+    empid:"Emp ID",
+    employeeid:"Emp ID",
+    name:"Name",
+    fathername:"Father Name",
+    dept:"Dept",
+    department:"Dept",
+    designation:"Designation",
+    doj:"DOJ",
+    dateofjoining:"DOJ",
+    status:"Status",
+    employeestatus:"Status",
+    vendor:"Vendor"
+  };
+  return aliases[key] || h;
+}
+
 function offrollCsvToRows(text){
   const wb=XLSX.read(text,{type:"string",cellDates:true});
   const ws=wb.Sheets[wb.SheetNames[0]];
 
-  // The Google Sheet has a title row ("All Depts Attendance")
-  // above the real column-header row. Row 2 contains the actual headers.
+  // The supplied Google Sheet has a title row ("All Depts Attendance")
+  // above the real header row. Detect the header row instead of assuming
+  // that Google will always export it at exactly row 2.
   const matrix=XLSX.utils.sheet_to_json(ws,{header:1,defval:"",raw:true});
   if(!matrix.length) return [];
 
-  const headerRowIndex=1; // Google Sheet row 2
-  const headers=(matrix[headerRowIndex]||[]).map(v=>String(v??"").trim());
+  let headerRowIndex=-1;
+  for(let i=0;i<Math.min(matrix.length,10);i++){
+    const normalized=(matrix[i]||[]).map(offrollCanonicalHeader);
+    const hasEmpId=normalized.includes("Emp ID");
+    const hasName=normalized.includes("Name");
+    const hasDept=normalized.includes("Dept");
+    const hasVendor=normalized.includes("Vendor");
+    if(hasEmpId && hasName && hasDept && hasVendor){
+      headerRowIndex=i;
+      break;
+    }
+  }
+  if(headerRowIndex<0) throw new Error("Attendance header row not found");
+
+  const headers=(matrix[headerRowIndex]||[]).map(offrollCanonicalHeader);
 
   return matrix.slice(headerRowIndex+1).map(row=>{
     const obj={};
@@ -1757,7 +1803,10 @@ async function loadOffrollFromGoogleSheet(){
     if(!rows.length) throw new Error("No attendance rows found");
     const required=["Emp ID","Name","Dept","Designation","DOJ","Status","Vendor"];
     const missing=required.filter(k=>!Object.prototype.hasOwnProperty.call(rows[0],k));
-    if(missing.length) throw new Error("Missing columns: "+missing.join(", "));
+    if(missing.length) {
+      const available=Object.keys(rows[0]||{}).join(", ");
+      throw new Error("Missing columns: "+missing.join(", ")+" • Found: "+available);
+    }
     const prepared=offrollPrepare(rows);
     if(!offrollDates.length) throw new Error("No daily attendance date columns found");
     offrollRows=prepared;
