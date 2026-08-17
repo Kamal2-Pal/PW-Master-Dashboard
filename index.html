@@ -345,7 +345,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
           <div><span class="dot green-dot"></span><b>N</b> — Present in Night</div>
           <div><span class="dot amber-dot"></span><b>HD</b> — Half Day</div>
           <div><span class="dot red-dot"></span><b>L</b> — Leave</div>
-          <div><span class="dot red-dot"></span><b>Blank</b> — Absent (past/current only)</div><div><b>Other</b> — Ignored / not counted</div>
+          <div><span class="dot red-dot"></span><b>Blank</b> — Absent</div>
         </div>
       </section>
     </div>
@@ -1613,23 +1613,74 @@ function offrollStatusClass(v){
          s==="L"?"offroll-status-l":"";
 }
 
+function offrollCleanHeader(v){
+  return String(v ?? "")
+    .replace(/[\uFEFF\u200B-\u200D\u2060]/g,"")
+    .replace(/\u00A0/g," ")
+    .trim()
+    .replace(/\s+/g," ");
+}
+
+function offrollCanonicalHeader(v){
+  const h=offrollCleanHeader(v);
+  const key=h.toLowerCase().replace(/[^a-z0-9]/g,"");
+  const aliases={
+    sno:"S.No.",
+    serialno:"S.No.",
+    empid:"Emp ID",
+    employeeid:"Emp ID",
+    name:"Name",
+    fathername:"Father Name",
+    dept:"Dept",
+    department:"Dept",
+    designation:"Designation",
+    doj:"DOJ",
+    dateofjoining:"DOJ",
+    status:"Status",
+    employeestatus:"Status",
+    vendor:"Vendor"
+  };
+  return aliases[key] || h;
+}
+
 function offrollCsvToRows(text){
   const wb=XLSX.read(text,{type:"string",cellDates:true});
   const ws=wb.Sheets[wb.SheetNames[0]];
-
-  // The Google Sheet has a title row ("All Depts Attendance")
-  // above the real column-header row. Row 2 contains the actual headers.
   const matrix=XLSX.utils.sheet_to_json(ws,{header:1,defval:"",raw:true});
   if(!matrix.length) return [];
 
-  const headerRowIndex=1; // Google Sheet row 2
-  const headers=(matrix[headerRowIndex]||[]).map(v=>String(v??"").trim());
+  let headerRowIndex=-1;
+  for(let i=0;i<Math.min(matrix.length,10);i++){
+    const normalized=(matrix[i]||[]).map(offrollCanonicalHeader);
+    if(normalized.includes("Emp ID") &&
+       normalized.includes("Name") &&
+       normalized.includes("Dept") &&
+       normalized.includes("Vendor")){
+      headerRowIndex=i;
+      break;
+    }
+  }
+  if(headerRowIndex<0) throw new Error("Attendance header row not found");
+
+  const rawHeaders=matrix[headerRowIndex]||[];
+  const headers=rawHeaders.map(offrollCanonicalHeader);
 
   return matrix.slice(headerRowIndex+1).map(row=>{
     const obj={};
+
     headers.forEach((h,i)=>{
       if(h) obj[h]=row[i] ?? "";
     });
+
+    // Google GViz can return an empty header for the visible S.No. and DOJ
+    // columns in this tracker. Recover those fields by their fixed positions.
+    if(!Object.prototype.hasOwnProperty.call(obj,"S.No.")){
+      obj["S.No."]=row[0] ?? "";
+    }
+    if(!Object.prototype.hasOwnProperty.call(obj,"DOJ")){
+      obj["DOJ"]=row[6] ?? "";
+    }
+
     return obj;
   }).filter(r=>Object.keys(r).length);
 }
@@ -1697,8 +1748,8 @@ function offrollCountStatus(rows,dateKey){
     else if(raw==="N")n++;
     else if(raw==="HD")hd++;
     else if(raw==="L")l++;
-    else if(raw==="")a++;       // only a truly blank past/current cell = absent
-    else ignored++;             // NA or any other status is not counted
+    else if(raw==="")a++;
+    else ignored++;
   });
   return {p,n,hd,l,a,ignored,total:rows.length};
 }
@@ -1770,14 +1821,16 @@ function offrollRender(){
       const known=offrollStatus(raw);
       const future=offrollIsFutureDate(d.date);
       const display=future ? (raw||"—") : (known || (raw ? raw : "—"));
-      const title=future ? "Future date — not counted" : (known ? offrollStatusLabel(known) : (raw ? "Ignored status — not counted" : "Absent"));
+      const title=future ? "Future date — not counted" :
+        (known ? offrollStatusLabel(known) :
+         (raw ? "Ignored status — not counted" : "Absent"));
       tr+=`<td class="${future?"":offrollStatusClass(known)}" title="${esc(title)}">${esc(display)}</td>`;
     });
     return tr+"</tr>";
   }).join("");
   document.getElementById("offrollTable").innerHTML=thead+body+"</tbody>";
   document.getElementById("offrollTableNote").textContent =
-    `${rows.length.toLocaleString()} employees • ${attendanceDays} attendance dates • Selected date: ${selected ? formatDateKey(selected) : "not selected"} • P/N counted as present; HD as half day; L as leave; blank as absent only for past/current dates; other values (e.g. NA) ignored; future dates not counted.`;
+    `${rows.length.toLocaleString()} employees • ${attendanceDays} attendance dates • Selected date: ${selected ? formatDateKey(selected) : "not selected"} • P/N counted as present; HD as half day; L as leave; blank as absent.`;
 }
 
 async function loadOffrollFromGoogleSheet(){
@@ -1791,7 +1844,7 @@ async function loadOffrollFromGoogleSheet(){
     if(!text.trim()) throw new Error("Google Sheet returned no data");
     const rows=offrollCsvToRows(text);
     if(!rows.length) throw new Error("No attendance rows found");
-    const required=["Emp ID","Name","Dept","Designation","DOJ","Status","Vendor"];
+    const required=["Emp ID","Name","Dept","Designation","Status","Vendor"];
     const missing=required.filter(k=>!Object.prototype.hasOwnProperty.call(rows[0],k));
     if(missing.length) throw new Error("Missing columns: "+missing.join(", "));
     const prepared=offrollPrepare(rows);
@@ -1822,7 +1875,11 @@ async function refreshOffrollLive(){
 function clearOffrollFilters(){
   ["offrollDept","offrollVendor","offrollEmpStatus"].forEach(id=>document.getElementById(id).value="");
   document.getElementById("offrollSearch").value="";
-  if(offrollDates.length)document.getElementById("offrollDate").value=offrollDates[offrollDates.length-1].date;
+  if(offrollDates.length){
+    const today=offrollTodayKey();
+    const usable=offrollDates.filter(d=>d.date<=today);
+    document.getElementById("offrollDate").value=usable.length ? usable[usable.length-1].date : "";
+  }
   offrollRender();
 }
 
