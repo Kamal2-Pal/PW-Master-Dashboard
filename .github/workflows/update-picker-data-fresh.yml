@@ -1,0 +1,100 @@
+name: Update latest Picker data
+
+on:
+  push:
+    paths:
+      - 'picker-reports/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-picker:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Find newly uploaded Picker report
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE="$(git diff --diff-filter=AM --name-only HEAD^ HEAD -- 'picker-reports/*' | grep -Ei '\.(xlsx|xls|csv)$' | tail -n 1 || true)"
+          if [ -z "$FILE" ]; then
+            echo "No new Picker report found."
+            exit 0
+          fi
+          echo "Using Picker report: $FILE"
+          echo "source_file=$FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Convert latest Picker report to stable CSV
+        if: steps.source.outputs.source_file != ''
+        env:
+          SOURCE_FILE: ${{ steps.source.outputs.source_file }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet openpyxl
+          python3 - <<'PY'
+          import csv, os
+          from pathlib import Path
+          from openpyxl import load_workbook
+
+          src = Path(os.environ['SOURCE_FILE'])
+          out = Path('picker-data.csv')
+          ext = src.suffix.lower()
+
+          if ext == '.csv':
+              out.write_bytes(src.read_bytes())
+          else:
+              wb = load_workbook(src, read_only=True, data_only=True)
+              ws = wb[wb.sheetnames[0]]
+              with out.open('w', newline='', encoding='utf-8-sig') as f:
+                  writer = csv.writer(f)
+                  for row in ws.iter_rows(values_only=True):
+                      writer.writerow(['' if v is None else v for v in row])
+              wb.close()
+
+          Path('picker-reports/latest-picker-report.csv').write_bytes(out.read_bytes())
+          print(f'Published {out} ({out.stat().st_size} bytes)')
+          PY
+
+      - name: Write Picker metadata
+        if: steps.source.outputs.source_file != ''
+        env:
+          SOURCE_FILE: ${{ steps.source.outputs.source_file }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          meta = {
+              'sourceFile': os.environ['SOURCE_FILE'],
+              'updatedAt': datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),
+              'commitSha': os.environ.get('GITHUB_SHA','')
+          }
+          with open('picker-data-meta.json','w',encoding='utf-8') as f:
+              json.dump(meta,f,indent=2)
+              f.write('\n')
+          PY
+
+      - name: Commit latest Picker data
+        if: steps.source.outputs.source_file != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add picker-data.csv picker-data-meta.json picker-reports/latest-picker-report.csv
+          if git diff --cached --quiet; then
+            echo "No Picker data changes to commit."
+            exit 0
+          fi
+          git commit -m "Update latest Picker data"
+          git push
