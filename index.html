@@ -123,6 +123,55 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
   .offroll-actions button{width:100%}
 }
 
+
+/* ===== Offroll Attendance View / Employee Login ===== */
+.offroll-view-scope{width:100%}
+.offroll-view-head{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:18px}
+.offroll-view-head h2{margin:0 0 5px;font-size:22px}
+.offroll-view-head p{margin:0;color:#66778a;font-size:13px}
+.offroll-login-card{max-width:520px;margin:28px auto;background:#fff;border:1px solid #e1e6eb;border-radius:14px;padding:24px;box-shadow:0 3px 12px #0000000a}
+.offroll-login-card h3{margin:0 0 8px;font-size:20px}
+.offroll-login-card .login-note{font-size:12px;color:#6d7a88;margin:0 0 18px;line-height:1.5}
+.offroll-login-form{display:grid;gap:13px}
+.offroll-login-form label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:#657281;font-weight:700;text-transform:uppercase}
+.offroll-login-form input{width:100%;min-width:0}
+.offroll-login-form button{width:100%;margin-top:3px}
+.offroll-login-error{display:none;background:#fff1f1;color:#b42323;border:1px solid #f2c4c4;border-radius:8px;padding:10px;font-size:12px;font-weight:700}
+.offroll-login-error.show{display:block}
+.offroll-view-private{display:none}
+.offroll-view-private.show{display:block}
+.offroll-view-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.offroll-view-kpi{background:#fff;border:1px solid #e3e8ee;border-radius:12px;padding:16px}
+.offroll-view-kpi small{color:#6b7785;text-transform:uppercase;font-weight:700;font-size:11px}
+.offroll-view-kpi strong{display:block;font-size:24px;margin-top:8px}
+.offroll-view-status-p{color:#187a43;font-weight:800}
+.offroll-view-status-n{color:#1667b5;font-weight:800}
+.offroll-view-status-hd{color:#a46d00;font-weight:800}
+.offroll-view-status-l{color:#c52f2f;font-weight:800}
+.offroll-view-status-a{color:#c52f2f;font-weight:800}
+.offroll-view-employee{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:18px;margin-bottom:16px}
+.offroll-view-employee-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.offroll-view-employee-item{background:#f7f9fb;border-radius:8px;padding:10px}
+.offroll-view-employee-item small{display:block;color:#6b7785;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:5px}
+.offroll-view-employee-item b{font-size:14px}
+.offroll-view-actions{display:flex;gap:8px;align-items:center}
+.offroll-view-actions button{white-space:nowrap}
+.offroll-view-table .table-wrap{max-height:520px}
+.offroll-view-table table{min-width:760px}
+.offroll-view-table th,.offroll-view-table td{text-align:left}
+.offroll-view-empty{padding:16px;background:#f7f9fb;border:1px dashed #d4dbe3;border-radius:8px;color:#687686;font-size:13px}
+@media(max-width:900px){
+  .offroll-view-kpis{grid-template-columns:repeat(2,1fr)}
+  .offroll-view-employee-grid{grid-template-columns:repeat(2,1fr)}
+  .offroll-view-head{align-items:flex-start;flex-direction:column}
+}
+@media(max-width:650px){
+  .offroll-view-kpis{grid-template-columns:1fr 1fr}
+  .offroll-view-employee-grid{grid-template-columns:1fr}
+  .offroll-view-actions{width:100%}
+  .offroll-view-actions button{flex:1}
+}
+
 </style>
 </head>
 <body>
@@ -141,6 +190,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
   <button class="tab" data-tab="manifestSlaTab">48H Manifest SLA</button>
   <button class="tab" data-tab="pickerTab">Picker Report</button>
   <button class="tab" data-tab="offrollTab">Offroll Attendance</button>
+  <button class="tab" data-tab="offrollViewTab">Offroll Attendance View</button>
 </div>
 
 <main class="wrap">
@@ -355,6 +405,54 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
       <div class="note" id="offrollTableNote"></div>
       <div class="table-wrap"><table id="offrollTable"></table></div>
     </section>
+  </div>
+</section>
+
+
+<section id="offrollViewTab" class="tab-panel">
+  <div class="offroll-view-scope">
+    <div class="offroll-view-head">
+      <div>
+        <h2>Offroll Attendance View</h2>
+        <p>Employee self-view • Login ID = <b>Emp ID</b> • Password = <b>DOJ</b> • Future dates are not counted.</p>
+      </div>
+      <div class="offroll-view-actions">
+        <button id="offrollViewRefreshBtn" type="button" onclick="refreshOffrollViewLive()">↻ Refresh</button>
+        <button id="offrollViewLogoutBtn" type="button" onclick="offrollViewLogout()" style="display:none">↪ Logout</button>
+      </div>
+    </div>
+
+    <div class="coverage-strip" id="offrollViewSourceLine">LIVE Offroll Google Sheet • loading…</div>
+
+    <div id="offrollViewLogin" class="offroll-login-card">
+      <h3>Employee Login</h3>
+      <p class="login-note">Apni attendance dekhne ke liye Emp ID aur DOJ enter karein. DOJ ko <b>DD/MM/YYYY</b>, <b>DD-MM-YYYY</b> ya <b>YYYY-MM-DD</b> format mein enter kar sakte hain.</p>
+      <form id="offrollLoginForm" class="offroll-login-form" onsubmit="event.preventDefault(); offrollViewLoginSubmit();">
+        <label>Login ID (Emp ID)
+          <input id="offrollLoginEmpId" type="text" autocomplete="username" placeholder="Enter Emp ID" required>
+        </label>
+        <label>Password (DOJ)
+          <input id="offrollLoginPassword" type="password" autocomplete="current-password" placeholder="DD/MM/YYYY" required>
+        </label>
+        <div id="offrollLoginError" class="offroll-login-error"></div>
+        <button class="primary" type="submit">Login</button>
+      </form>
+    </div>
+
+    <div id="offrollViewPrivate" class="offroll-view-private">
+      <div class="offroll-view-kpis" id="offrollViewKpis"></div>
+
+      <section class="offroll-view-employee">
+        <div class="section-title">Employee Details</div>
+        <div class="offroll-view-employee-grid" id="offrollViewEmployee"></div>
+      </section>
+
+      <section class="table-card offroll-view-table">
+        <div class="section-title">My Attendance</div>
+        <div class="note" id="offrollViewNote"></div>
+        <div class="table-wrap"><table id="offrollViewTable"></table></div>
+      </section>
+    </div>
   </div>
 </section>
 
@@ -1894,7 +1992,211 @@ document.querySelectorAll(".tab").forEach(btn=>{
   });
 });
 
+
 loadOffrollFromGoogleSheet();
+
+/* ===== Offroll Attendance View / Employee Login ===== */
+let offrollLoggedEmployee = null;
+
+function offrollViewDateKeyFromAny(v){
+  const s=offrollNorm(v);
+  if(!s) return "";
+  const direct=offrollDateKey(s);
+  if(direct) return direct;
+
+  // Common DOJ formats if the source contains a date-time string.
+  const d=parseSlaDate(s);
+  if(d && !isNaN(d.getTime())){
+    return [d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");
+  }
+  return "";
+}
+
+function offrollViewPasswordMatches(input, doj){
+  const a=offrollNorm(input);
+  const b=offrollNorm(doj);
+  if(!a || !b) return false;
+
+  const ak=offrollViewDateKeyFromAny(a);
+  const bk=offrollViewDateKeyFromAny(b);
+  if(ak && bk) return ak===bk;
+
+  // Fallback: compare compacted date strings if parsing is not possible.
+  const compact=x=>x.toLowerCase().replace(/[^a-z0-9]/g,"");
+  return compact(a)===compact(b);
+}
+
+function offrollViewSetError(message){
+  const el=document.getElementById("offrollLoginError");
+  if(!el) return;
+  el.textContent=message;
+  el.classList.toggle("show",!!message);
+}
+
+function offrollViewFindEmployee(empId){
+  const wanted=offrollNorm(empId).toLowerCase();
+  if(!wanted) return null;
+  return offrollRows.find(r=>offrollNorm(r["Emp ID"]).toLowerCase()===wanted) || null;
+}
+
+function offrollViewStatusInfo(raw){
+  const s=offrollRawStatus(raw);
+  if(s==="P") return {label:"Present",cls:"offroll-view-status-p"};
+  if(s==="N") return {label:"Night Present",cls:"offroll-view-status-n"};
+  if(s==="HD") return {label:"Half Day",cls:"offroll-view-status-hd"};
+  if(s==="L") return {label:"Leave",cls:"offroll-view-status-l"};
+  if(s==="") return {label:"Absent",cls:"offroll-view-status-a"};
+  return {label:"Ignored",cls:""};
+}
+
+function offrollViewRender(employee){
+  if(!employee) return;
+
+  const today=offrollTodayKey();
+  const usableDates=offrollDates.filter(d=>d.date<=today);
+  const todayDate=usableDates.find(d=>d.date===today) || null;
+
+  let todayRaw="";
+  if(todayDate) todayRaw=offrollRawStatus(employee.__dateStatus[todayDate.date]);
+  const todayInfo=todayDate ? offrollViewStatusInfo(todayRaw) : {label:"No attendance column",cls:""};
+
+  // History counts only recognized statuses on dates up to today.
+  let present=0,night=0,half=0,leave=0,absent=0,ignored=0;
+  usableDates.forEach(d=>{
+    const s=offrollRawStatus(employee.__dateStatus[d.date]);
+    if(s==="P")present++;
+    else if(s==="N")night++;
+    else if(s==="HD")half++;
+    else if(s==="L")leave++;
+    else if(s==="")absent++;
+    else ignored++;
+  });
+
+  document.getElementById("offrollViewKpis").innerHTML=[
+    ["Today",todayDate ? todayInfo.label : "Not available",""],
+    ["Present (P)",present,""],
+    ["Night Present (N)",night,""],
+    ["Half Day (HD)",half,""],
+    ["Leave (L)",leave,""],
+    ["Absent (Blank)",absent,""],
+    ["Ignored (NA etc.)",ignored,""]
+  ].map(([k,v,c])=>`<div class="offroll-view-kpi"><small>${k}</small><strong class="${todayDate && k==="Today" ? todayInfo.cls : ""}">${esc(String(v))}</strong></div>`).join("");
+
+  document.getElementById("offrollViewEmployee").innerHTML=[
+    ["Emp ID",employee.__empId],
+    ["Name",employee.__name],
+    ["Department",employee.__dept],
+    ["Designation",employee["Designation"]??""],
+    ["DOJ",employee["DOJ"]??""],
+    ["Employee Status",employee.__empStatus],
+    ["Vendor",employee.__vendor]
+  ].map(([k,v])=>`<div class="offroll-view-employee-item"><small>${esc(k)}</small><b>${esc(v||"—")}</b></div>`).join("");
+
+  const rows=usableDates.slice().reverse().map(d=>{
+    const raw=offrollRawStatus(employee.__dateStatus[d.date]);
+    const info=offrollViewStatusInfo(raw);
+    const display=raw ? raw : "—";
+    const title=raw==="P"||raw==="N"||raw==="HD"||raw==="L"
+      ? info.label
+      : raw ? "Ignored status — not counted" : "Blank = Absent";
+    return `<tr><td>${esc(formatDateKey(d.date))}</td><td><b class="${info.cls}">${esc(display)}</b></td><td>${esc(title)}</td></tr>`;
+  }).join("");
+
+  document.getElementById("offrollViewTable").innerHTML=
+    `<thead><tr><th>Attendance Date</th><th>Status</th><th>Meaning</th></tr></thead><tbody>${rows || `<tr><td colspan="3">No attendance dates available.</td></tr>`}</tbody>`;
+
+  document.getElementById("offrollViewNote").textContent=
+    `${employee.__name || employee.__empId} • Showing ${usableDates.length} dates up to today (${formatDateKey(today)}). P/N/HD/L are counted; blank = absent; other values such as NA are ignored. Future dates are not counted.`;
+}
+
+function offrollViewLoginSubmit(){
+  offrollViewSetError("");
+
+  if(!offrollRows.length){
+    offrollViewSetError("Live attendance data abhi load nahi hua. Pehle Refresh karein.");
+    return;
+  }
+
+  const empId=document.getElementById("offrollLoginEmpId").value;
+  const password=document.getElementById("offrollLoginPassword").value;
+  const employee=offrollViewFindEmployee(empId);
+
+  if(!employee){
+    offrollViewSetError("Invalid Emp ID.");
+    return;
+  }
+
+  if(!offrollViewPasswordMatches(password,employee["DOJ"])){
+    offrollViewSetError("Invalid password. Password = DOJ hai.");
+    return;
+  }
+
+  offrollLoggedEmployee=employee;
+  document.getElementById("offrollViewLogin").style.display="none";
+  document.getElementById("offrollViewPrivate").classList.add("show");
+  document.getElementById("offrollViewLogoutBtn").style.display="";
+  document.getElementById("offrollViewLoginEmpId").value="";
+  document.getElementById("offrollViewLoginPassword").value="";
+  offrollViewRender(employee);
+}
+
+function offrollViewLogout(){
+  offrollLoggedEmployee=null;
+  document.getElementById("offrollViewPrivate").classList.remove("show");
+  document.getElementById("offrollViewLogin").style.display="";
+  document.getElementById("offrollViewLogoutBtn").style.display="none";
+  document.getElementById("offrollLoginForm").reset();
+  offrollViewSetError("");
+}
+
+async function refreshOffrollViewLive(){
+  const btn=document.getElementById("offrollViewRefreshBtn");
+  if(btn){btn.disabled=true;btn.textContent="↻ Refreshing…";}
+  try{
+    await loadOffrollFromGoogleSheet();
+    if(offrollLoggedEmployee){
+      const refreshed=offrollViewFindEmployee(offrollLoggedEmployee.__empId);
+      if(refreshed && offrollViewPasswordMatches(offrollLoggedEmployee["DOJ"],refreshed["DOJ"])){
+        offrollLoggedEmployee=refreshed;
+        offrollViewRender(refreshed);
+      }else{
+        offrollViewLogout();
+      }
+    }
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent="↻ Refresh";}
+  }
+}
+
+// Keep the employee view synchronized after the main Offroll Google Sheet refresh.
+const _originalLoadOffrollFromGoogleSheet = loadOffrollFromGoogleSheet;
+loadOffrollFromGoogleSheet = async function(){
+  const result=await _originalLoadOffrollFromGoogleSheet();
+  const source=document.getElementById("offrollViewSourceLine");
+  if(source){
+    source.textContent=document.getElementById("offrollSourceLine")?.textContent || "LIVE Offroll Google Sheet";
+  }
+  if(offrollLoggedEmployee){
+    const refreshed=offrollViewFindEmployee(offrollLoggedEmployee.__empId);
+    if(refreshed){
+      offrollLoggedEmployee=refreshed;
+      offrollViewRender(refreshed);
+    }
+  }
+  return result;
+};
+
+// When the new view tab is opened, use the same live Google Sheet data.
+document.querySelectorAll(".tab").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    if(btn.dataset.tab==="offrollViewTab"){
+      const source=document.getElementById("offrollViewSourceLine");
+      if(source) source.textContent=document.getElementById("offrollSourceLine")?.textContent || "LIVE Offroll Google Sheet • loading…";
+      if(!offrollRows.length) loadOffrollFromGoogleSheet();
+      else if(offrollLoggedEmployee) offrollViewRender(offrollLoggedEmployee);
+    }
+  });
+});
 
 </script>
 </body>
