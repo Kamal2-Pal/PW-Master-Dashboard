@@ -2,129 +2,138 @@ name: Update latest Vinculum data
 
 on:
   push:
-    paths:
-      - '*.xlsx'
-      - '*.xls'
-      - '*.xlsb'
+    paths-ignore:
+      - "data.xlsx"
+      - "data-meta.json"
+      - "picker-data.csv"
+      - "picker-data-meta.json"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  update-vinculum:
+  update-data:
     runs-on: ubuntu-latest
-    if: github.actor != 'github-actions[bot]'
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
-      - name: Find newly uploaded Excel report
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Excel readers
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas openpyxl pyxlsb xlrd
+
+      - name: Find newly uploaded Vinculum Excel
         id: source
         shell: bash
         run: |
           set -euo pipefail
 
-          FILE="$(
-            git diff --diff-filter=AM --name-only HEAD^ HEAD -- \
-              '*.xlsx' '*.xls' '*.xlsb' |
-              grep -Ev '(^|/)data\.xlsx$' |
-              tail -n 1 || true
+          # On an upload commit, use ONLY Excel files that were actually
+          # added/modified in that commit. This prevents an older .xlsb
+          # sitting in the repository from being selected accidentally.
+          SOURCE="$(
+            git diff-tree --no-commit-id --name-only --diff-filter=ACMR -r "$GITHUB_SHA" \
+            | grep -Ei '\.(xlsx|xlsb|xlsm|xls)$' \
+            | grep -Ev '(^|/)(data\.xlsx|data-meta\.json)$' \
+            | head -n 1 || true
           )"
 
-          if [ -z "$FILE" ]; then
-            echo "No new Vinculum Excel report found."
-            exit 0
+          # Manual "Run workflow" fallback: choose the Excel file with the
+          # newest Git commit touching that file, excluding generated files.
+          if [ -z "$SOURCE" ]; then
+            best=""
+            best_ts=0
+
+            while IFS= read -r f; do
+              case "$f" in
+                data.xlsx|*.meta.xlsx|data-meta.json) continue ;;
+              esac
+
+              ts="$(git log -1 --format=%ct -- "$f" 2>/dev/null || echo 0)"
+              if [ "$ts" -gt "$best_ts" ]; then
+                best_ts="$ts"
+                best="$f"
+              fi
+            done < <(git ls-files | grep -Ei '\.(xlsx|xlsb|xlsm|xls)$' || true)
+
+            SOURCE="$best"
           fi
 
-          echo "Using Vinculum report: $FILE"
-          echo "source_file=$FILE" >> "$GITHUB_OUTPUT"
+          if [ -z "$SOURCE" ]; then
+            echo "No Vinculum Excel source file found."
+            exit 1
+          fi
 
-      - name: Install conversion tools
-        if: steps.source.outputs.source_file != ''
+          echo "Selected source: $SOURCE"
+          echo "path=$SOURCE" >> "$GITHUB_OUTPUT"
+
+      - name: Replace dashboard data with selected upload
+        env:
+          SOURCE_FILE: ${{ steps.source.outputs.path }}
         shell: bash
         run: |
           set -euo pipefail
 
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq libreoffice
-
-      - name: Convert latest report to data.xlsx
-        if: steps.source.outputs.source_file != ''
-        env:
-          SOURCE_FILE: ${{ steps.source.outputs.source_file }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          SRC="$SOURCE_FILE"
-
-          case "${SRC##*.}" in
-            xlsx|XLSX)
-              cp "$SRC" data.xlsx
-              ;;
-
-            xls|XLS|xlsb|XLSB)
-              mkdir -p converted
-
-              libreoffice \
-                --headless \
-                --convert-to xlsx \
-                --outdir converted \
-                "$SRC"
-
-              GENERATED="converted/$(basename "${SRC%.*}").xlsx"
-
-              if [ ! -f "$GENERATED" ]; then
-                echo "Conversion failed: $GENERATED not found."
-                exit 1
-              fi
-
-              cp "$GENERATED" data.xlsx
-              ;;
-
-            *)
-              echo "Unsupported file type: $SRC"
-              exit 1
-              ;;
-          esac
-
-          echo "Latest Vinculum data written to data.xlsx"
-          ls -lh data.xlsx
-
-      - name: Write Vinculum metadata
-        if: steps.source.outputs.source_file != ''
-        env:
-          SOURCE_FILE: ${{ steps.source.outputs.source_file }}
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import json
+          python - <<'PY'
           import os
-          from datetime import datetime, timezone
           from pathlib import Path
+          import json
+          from datetime import datetime, timezone
 
-          source = os.environ["SOURCE_FILE"]
-          data_file = Path("data.xlsx")
+          import pandas as pd
+
+          source = Path(os.environ["SOURCE_FILE"])
+          suffix = source.suffix.lower()
+
+          if suffix == ".xlsb":
+              engine = "pyxlsb"
+          elif suffix == ".xls":
+              engine = "xlrd"
+          else:
+              engine = "openpyxl"
+
+          print(f"Reading: {source} using {engine}")
+          df = pd.read_excel(source, sheet_name=0, engine=engine, dtype=object)
+
+          # Keep the dashboard's existing column names exactly as supplied
+          # by the uploaded report, while removing completely empty columns.
+          df = df.dropna(axis=1, how="all")
+
+          # Convert pandas timestamps to Excel-compatible datetimes.
+          for col in df.columns:
+              if pd.api.types.is_datetime64_any_dtype(df[col]):
+                  df[col] = df[col].where(df[col].notna(), None)
+
+          out = Path("data.xlsx")
+          with pd.ExcelWriter(out, engine="openpyxl", datetime_format="yyyy-mm-dd hh:mm:ss") as writer:
+              df.to_excel(writer, index=False, sheet_name="Data")
 
           meta = {
-              "sourceFile": source,
-              "updatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-              "commitSha": os.environ.get("GITHUB_SHA", ""),
-              "dataFile": "data.xlsx",
-              "dataSizeBytes": data_file.stat().st_size if data_file.exists() else 0
+              "sourceFile": source.name,
+              "sourcePath": str(source),
+              "updatedAt": datetime.now(timezone.utc).isoformat(),
+              "rows": int(len(df)),
+              "columns": int(len(df.columns))
           }
+          Path("data-meta.json").write_text(
+              json.dumps(meta, indent=2),
+              encoding="utf-8"
+          )
 
-          with open("data-meta.json", "w", encoding="utf-8") as f:
-              json.dump(meta, f, indent=2)
-              f.write("\n")
+          print(json.dumps(meta, indent=2))
           PY
 
-      - name: Commit latest Vinculum data
-        if: steps.source.outputs.source_file != ''
+      - name: Commit latest dashboard data and metadata
         shell: bash
         run: |
           set -euo pipefail
@@ -135,9 +144,9 @@ jobs:
           git add data.xlsx data-meta.json
 
           if git diff --cached --quiet; then
-            echo "No data changes to commit."
+            echo "No generated data changes to commit."
             exit 0
           fi
 
-          git commit -m "Auto-update latest Vinculum data"
+          git commit -m "Update latest Vinculum dashboard data"
           git push
