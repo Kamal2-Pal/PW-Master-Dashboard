@@ -1,0 +1,143 @@
+name: Update latest Vinculum data
+
+on:
+  push:
+    paths:
+      - '*.xlsx'
+      - '*.xls'
+      - '*.xlsb'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-vinculum:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Find newly uploaded Excel report
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          FILE="$(
+            git diff --diff-filter=AM --name-only HEAD^ HEAD -- \
+              '*.xlsx' '*.xls' '*.xlsb' |
+              grep -Ev '(^|/)data\.xlsx$' |
+              tail -n 1 || true
+          )"
+
+          if [ -z "$FILE" ]; then
+            echo "No new Vinculum Excel report found."
+            exit 0
+          fi
+
+          echo "Using Vinculum report: $FILE"
+          echo "source_file=$FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Install conversion tools
+        if: steps.source.outputs.source_file != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libreoffice
+
+      - name: Convert latest report to data.xlsx
+        if: steps.source.outputs.source_file != ''
+        env:
+          SOURCE_FILE: ${{ steps.source.outputs.source_file }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SRC="$SOURCE_FILE"
+
+          case "${SRC##*.}" in
+            xlsx|XLSX)
+              cp "$SRC" data.xlsx
+              ;;
+
+            xls|XLS|xlsb|XLSB)
+              mkdir -p converted
+
+              libreoffice \
+                --headless \
+                --convert-to xlsx \
+                --outdir converted \
+                "$SRC"
+
+              GENERATED="converted/$(basename "${SRC%.*}").xlsx"
+
+              if [ ! -f "$GENERATED" ]; then
+                echo "Conversion failed: $GENERATED not found."
+                exit 1
+              fi
+
+              cp "$GENERATED" data.xlsx
+              ;;
+
+            *)
+              echo "Unsupported file type: $SRC"
+              exit 1
+              ;;
+          esac
+
+          echo "Latest Vinculum data written to data.xlsx"
+          ls -lh data.xlsx
+
+      - name: Write Vinculum metadata
+        if: steps.source.outputs.source_file != ''
+        env:
+          SOURCE_FILE: ${{ steps.source.outputs.source_file }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          source = os.environ["SOURCE_FILE"]
+          data_file = Path("data.xlsx")
+
+          meta = {
+              "sourceFile": source,
+              "updatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+              "commitSha": os.environ.get("GITHUB_SHA", ""),
+              "dataFile": "data.xlsx",
+              "dataSizeBytes": data_file.stat().st_size if data_file.exists() else 0
+          }
+
+          with open("data-meta.json", "w", encoding="utf-8") as f:
+              json.dump(meta, f, indent=2)
+              f.write("\n")
+          PY
+
+      - name: Commit latest Vinculum data
+        if: steps.source.outputs.source_file != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add data.xlsx data-meta.json
+
+          if git diff --cached --quiet; then
+            echo "No data changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Auto-update latest Vinculum data"
+          git push
