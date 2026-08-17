@@ -246,9 +246,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 <section id="pickerTab" class="tab-panel">
   <div class="picker-scope">
     <div class="picker-actions" style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:12px">
-      <label class="upload-label primary" for="pickerFileInput">＋ Upload Picker Report</label>
-      <button onclick="resetPickerReport()">↻ Reset Picker Report</button>
-      <input id="pickerFileInput" type="file" accept=".csv,.xlsx,.xls" style="display:none">
+      <button onclick="refreshPickerLive()">↻ Refresh Picker Data</button>
     </div>
     
   <div class="hero">
@@ -259,7 +257,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
   </div>
 
   <div class="note" id="pickerSourceLine" style="margin:8px 0 14px">
-  No picker report loaded • upload the latest Picker Report
+  LIVE Picker Report • waiting for latest GitHub report
   <button id="pickerLiveRefreshBtn" type="button" onclick="refreshPickerLive()" style="margin-left:8px;padding:4px 9px;border-radius:6px;font-size:11px;background:#fff;color:#182230;border:1px solid #d4dbe3;cursor:pointer">↻ Refresh</button>
 </div>
 
@@ -1200,73 +1198,11 @@ function loadPickerObjects(data,name){
   renderPicker();
 }
 
-document.getElementById("pickerFileInput").onchange=async e=>{
-  const f=e.target.files[0];
-  if(!f)return;
-  try{
-    const buf=await f.arrayBuffer();
-    const wb=XLSX.read(buf,{type:"array",cellDates:true});
-    const ws=wb.Sheets[wb.SheetNames[0]];
-    const data=normalizeRows(XLSX.utils.sheet_to_json(ws,{defval:""}));
-    if(!data.length) throw new Error("Picker report is empty");
-
-    const required=["Pick User","Bin","Qty","Picklist No.","Order No","Source WH"];
-    const keys=Object.keys(data[0]||{});
-    const missing=required.filter(k=>!keys.includes(k));
-    if(missing.length) throw new Error("Invalid Picker report. Missing: "+missing.join(", "));
-
-    // THIS UPLOAD BECOMES THE NEW CURRENT PICKER REPORT.
-    // It is stored in the browser, so refresh/reopen will not revert to old data.
-    await savePickerLocal(data,f.name);
-    loadPickerObjects(data,f.name);
-    savePickerReportLocally(data,f.name);
-    document.getElementById("pickerDateFilter").value="";
-    renderPicker();
-  }catch(err){
-    alert("Picker Report read nahi ho payi: "+err.message);
-  }finally{
-    e.target.value="";
-  }
-};
-
-const PICKER_LOCAL_STORAGE_KEY = "vinculum_picker_report_v1";
-
-function savePickerReportLocally(data, name){
-  try{
-    localStorage.setItem(PICKER_LOCAL_STORAGE_KEY, JSON.stringify({
-      name: name || "Uploaded Picker Report",
-      rows: data || [],
-      savedAt: new Date().toISOString()
-    }));
-    return true;
-  }catch(err){
-    console.warn("Could not save Picker Report locally:", err);
-    return false;
-  }
-}
-
-function loadPickerReportLocally(){
-  try{
-    const saved = localStorage.getItem(PICKER_LOCAL_STORAGE_KEY);
-    if(!saved) return false;
-    const obj = JSON.parse(saved);
-    if(!obj || !Array.isArray(obj.rows) || !obj.rows.length) return false;
-
-    loadPickerObjects(obj.rows, `${obj.name || "Uploaded Picker Report"} • saved on this browser`);
-    document.getElementById("pickerDateFilter").value="";
-    renderPicker();
-    return true;
-  }catch(err){
-    console.warn("Could not load saved Picker Report:", err);
-    return false;
-  }
-}
-
 async function loadLatestPickerFromGithub(){
   // PUBLIC LIVE PICKER SOURCE:
   // Every visitor to GitHub Pages reads the same stable CSV maintained by
   // the Picker GitHub Action. No browser-local Picker copy is used here.
-  const path = "picker-reports/latest-picker-report.csv";
+  const path = "picker-data.csv";
   const cacheBust = Date.now() + "-" + Math.random().toString(36).slice(2);
 
   try{
@@ -1291,7 +1227,7 @@ async function loadLatestPickerFromGithub(){
     const missing=required.filter(k=>!keys.includes(k));
     if(missing.length) throw new Error("Invalid live Picker report. Missing: "+missing.join(", "));
 
-    loadPickerObjects(data,"LIVE Picker Report");
+    loadPickerObjects(data,"LIVE Picker Report • GitHub");
     document.getElementById("pickerDateFilter").value="";
     renderPicker();
 
@@ -1328,16 +1264,11 @@ async function refreshPickerLive(){
   }
 }
 
-async function resetPickerReport(){
-  document.getElementById("pickerDateFilter").value="";
-  await loadLatestPickerFromGithub();
-}
 
 ["pickerUserFilter","pickerBinFilter","pickerWhFilter","pickerDateFilter"]
   .forEach(id=>document.getElementById(id).addEventListener("change",renderPicker));
 
-// Initial load: use the latest file uploaded in this browser if present;
-// otherwise use GitHub's live Picker CSV.
+// Initial load: always use the public GitHub live Picker CSV.
 loadLatestPickerFromGithub();
 
 </script>
