@@ -92,7 +92,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 </head>
 <body>
 <header class="header">
- <div class="title"><div class="logo">V</div><div><h1>Vinculum WMS Dashboard</h1><div class="sub" id="sourceText">Loading latest central Vinculum report…</div></div></div>
+ <div class="title"><div class="logo">V</div><div><h1>Vinculum WMS Dashboard</h1><div class="sub"><span id="sourceText">Loading latest central Vinculum report…</span> <button onclick="refreshLatestFile()" style="margin-left:8px;padding:4px 9px;border-radius:6px;font-size:11px;background:#fff;color:#182230;border:1px solid #d4dbe3">↻ Refresh</button></div></div></div>
  <div class="actions">
    <label class="upload-label primary" for="file">＋ Upload Vinculum Excel</label>
    <button onclick="resetAll()">↻ Reset</button>
@@ -437,6 +437,26 @@ function clearFilters() {
   applyFilters();
 }
 function resetAll(){ loadCentralExcel(); }
+
+async function refreshLatestFile(){
+  const btn = event && event.currentTarget ? event.currentTarget : null;
+  if(btn){
+    btn.disabled = true;
+    btn.textContent = "↻ Refreshing…";
+  }
+  document.getElementById("sourceText").textContent = "Refreshing latest central Vinculum report…";
+  try{
+    // Force this button to read the latest GitHub data.xlsx instead of
+    // reusing an older report saved in this browser's local storage.
+    localStorage.removeItem(CENTRAL_LOCAL_STORAGE_KEY);
+    await loadCentralExcel();
+  }finally{
+    if(btn){
+      btn.disabled = false;
+      btn.textContent = "↻ Refresh";
+    }
+  }
+}
 
 function normalizeRows(rows){
   return (rows||[]).map(r=>{
