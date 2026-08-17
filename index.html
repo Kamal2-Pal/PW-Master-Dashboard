@@ -194,6 +194,12 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
     <div class="table-wrap"><table><thead><tr><th>WH Remarks</th><th>Breached Orders</th><th>% of Breached</th></tr></thead><tbody id="slaRemarksTbody"></tbody></table></div>
   </section>
 
+  <section class="table-card" style="margin-bottom:16px">
+    <div class="section-title">Open >48H — Order-wise Remarks</div>
+    <div class="note">Only currently open orders whose <b>Order create date → Actual_ShipDate</b> age is more than 48 hours. Remarks are shown order-wise from <b>WH remarks</b>.</div>
+    <div class="table-wrap"><table><thead><tr><th>Order No</th><th>Warehouse</th><th>Order Create Date</th><th>Open Hours</th><th>WH Remarks</th></tr></thead><tbody id="slaOpen48RemarksTbody"></tbody></table></div>
+  </section>
+
   <section class="table-card">
     <div class="section-title">48H SLA Order Details</div>
     <div class="note" id="slaNote"></div>
@@ -245,6 +251,12 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
       </div>
     </section>
   </div>
+
+  <section class="table-card" style="margin-bottom:16px">
+    <div class="section-title">Open >48H — Order-wise Remarks</div>
+    <div class="note">Only currently open orders whose <b>Order create date → Manifest Create Date</b> age is more than 48 hours. Remarks are shown order-wise from <b>WH remarks</b>.</div>
+    <div class="table-wrap"><table><thead><tr><th>Order No</th><th>Warehouse</th><th>Order Create Date</th><th>Open Hours</th><th>WH Remarks</th></tr></thead><tbody id="manifestOpen48RemarksTbody"></tbody></table></div>
+  </section>
 
   <section class="table-card">
     <div class="section-title">48H Manifest SLA Order Details</div>
@@ -879,6 +891,19 @@ function renderSla(){
     slaRemarks[remark]=(slaRemarks[remark]||0)+1;
   });
   const slaRemarkPairs=Object.entries(slaRemarks).sort((a,b)=>b[1]-a[1]);
+  const slaOpen48RemarksBody=document.getElementById("slaOpen48RemarksTbody");
+  if(slaOpen48RemarksBody){
+    const open48=rows.filter(r=>r._sla==="Open >48H")
+      .sort((a,b)=>(b._hours||0)-(a._hours||0));
+    slaOpen48RemarksBody.innerHTML=open48.length
+      ? open48.map(r=>{
+          const remark=String(get(r,["WH remarks","WH Remarks","WH remarks "]) ?? "").trim() || "Blank / No Remarks";
+          const orderDate=get(r,["Order create date","OrderDate"]);
+          return `<tr><td>${esc(get(r,["Order No"])??"")}</td><td>${esc(get(r,["FulfillmentLocationName"])??"")}</td><td>${esc(orderDate??"")}</td><td>${r._hours!=null?r._hours.toFixed(1):""}</td><td>${esc(remark)}</td></tr>`;
+        }).join("")
+      : `<tr><td colspan="5">No open orders above 48 hours in the selected filters.</td></tr>`;
+  }
+
   const slaRemarksBody=document.getElementById("slaRemarksTbody");
   if(slaRemarksBody){
     slaRemarksBody.innerHTML=slaRemarkPairs.length
@@ -1052,6 +1077,19 @@ function renderManifestSla(){
   document.getElementById("remarksTbody").innerHTML = remarkPairs.length
     ? remarkPairs.map(([remark,count])=>`<tr><td>${esc(remark)}</td><td>${count.toLocaleString()}</td><td>${breached?((count/breached)*100).toFixed(1):"0.0"}%</td></tr>`).join("")
     : `<tr><td colspan="3">No breached orders in the selected filters.</td></tr>`;
+
+  const manifestOpen48RemarksBody=document.getElementById("manifestOpen48RemarksTbody");
+  if(manifestOpen48RemarksBody){
+    const open48=rows.filter(r=>r._manifestSla==="Open >48H")
+      .sort((a,b)=>(b._manifestHours||0)-(a._manifestHours||0));
+    manifestOpen48RemarksBody.innerHTML=open48.length
+      ? open48.map(r=>{
+          const remark=String(get(r,["WH remarks","WH Remarks","WH remarks "]) ?? "").trim() || "Blank / No Remarks";
+          const orderDate=get(r,["Order create date","OrderDate"]);
+          return `<tr><td>${esc(get(r,["Order No"])??"")}</td><td>${esc(get(r,["FulfillmentLocationName"])??"")}</td><td>${esc(orderDate??"")}</td><td>${r._manifestHours!=null?r._manifestHours.toFixed(1):""}</td><td>${esc(remark)}</td></tr>`;
+        }).join("")
+      : `<tr><td colspan="5">No open orders above 48 hours in the selected filters.</td></tr>`;
+  }
 
   const cols=["Order No","Order create date","Status","FulfillmentLocationName","finance_category","Order Qty","Manifest Create Date","WH remarks"];
   document.getElementById("manifestThead").innerHTML="<tr>"+cols.map(c=>`<th>${esc(c)}</th>`).join("")+
