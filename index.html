@@ -307,7 +307,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
     <div class="offroll-actions">
       <div>
         <h2>Offroll Attendance Dashboard</h2>
-        <p>LIVE source: Google Sheet • Attendance logic: <b>P</b> Present, <b>N</b> Night Present, <b>L</b> Leave, <b>HD</b> Half Day, blank = Absent.</p>
+        <p>LIVE source: Google Sheet • Attendance logic: <b>P</b> Present, <b>N</b> Night Present, <b>L</b> Leave, <b>HD</b> Half Day, blank = Absent; other values (e.g. NA) are ignored; future dates are not counted.</p>
       </div>
       <button id="offrollRefreshBtn" type="button" onclick="refreshOffrollLive()">↻ Refresh Google Sheet</button>
     </div>
@@ -345,7 +345,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
           <div><span class="dot green-dot"></span><b>N</b> — Present in Night</div>
           <div><span class="dot amber-dot"></span><b>HD</b> — Half Day</div>
           <div><span class="dot red-dot"></span><b>L</b> — Leave</div>
-          <div><span class="dot red-dot"></span><b>Blank</b> — Absent</div>
+          <div><span class="dot red-dot"></span><b>Blank</b> — Absent (past/current only)</div><div><b>Other</b> — Ignored / not counted</div>
         </div>
       </section>
     </div>
@@ -1583,8 +1583,12 @@ function offrollDateKey(v){
   return "";
 }
 
+function offrollRawStatus(v){
+  return offrollNorm(v).toUpperCase();
+}
+
 function offrollStatus(v){
-  const s=offrollNorm(v).toUpperCase();
+  const s=offrollRawStatus(v);
   if(s==="P") return "P";
   if(s==="N") return "N";
   if(s==="L") return "L";
@@ -1594,12 +1598,19 @@ function offrollStatus(v){
 
 function offrollStatusLabel(v){
   const s=offrollStatus(v);
-  return s==="P" ? "Present" : s==="N" ? "Night Present" : s==="L" ? "Leave" : s==="HD" ? "Half Day" : "Absent";
+  return s==="P" ? "Present" :
+         s==="N" ? "Night Present" :
+         s==="L" ? "Leave" :
+         s==="HD" ? "Half Day" :
+         "Ignored";
 }
 
 function offrollStatusClass(v){
   const s=offrollStatus(v);
-  return s==="P"?"offroll-status-p":s==="N"?"offroll-status-n":s==="HD"?"offroll-status-hd":s==="L"?"offroll-status-l":"offroll-status-a";
+  return s==="P"?"offroll-status-p":
+         s==="N"?"offroll-status-n":
+         s==="HD"?"offroll-status-hd":
+         s==="L"?"offroll-status-l":"";
 }
 
 function offrollCsvToRows(text){
@@ -1619,17 +1630,6 @@ function offrollCsvToRows(text){
     headers.forEach((h,i)=>{
       if(h) obj[h]=row[i] ?? "";
     });
-
-    // In this particular Google Sheet, the CSV export can lose the
-    // visible header labels for column A (S.No.) and column G (DOJ),
-    // while still returning their row values. Recover them by position.
-    if(!Object.prototype.hasOwnProperty.call(obj,"S.No.") && row.length > 0){
-      obj["S.No."] = row[0] ?? "";
-    }
-    if(!Object.prototype.hasOwnProperty.call(obj,"DOJ") && row.length > 6){
-      obj["DOJ"] = row[6] ?? "";
-    }
-
     return obj;
   }).filter(r=>Object.keys(r).length);
 }
@@ -1677,13 +1677,30 @@ function offrollSelectedDate(){
   return document.getElementById("offrollDate").value;
 }
 
+function offrollTodayKey(){
+  const d=new Date();
+  return [d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");
+}
+
+function offrollIsFutureDate(dateKey){
+  return !!dateKey && dateKey > offrollTodayKey();
+}
+
 function offrollCountStatus(rows,dateKey){
-  let p=0,n=0,hd=0,l=0,a=0;
+  let p=0,n=0,hd=0,l=0,a=0,ignored=0;
+  if(!dateKey || offrollIsFutureDate(dateKey)){
+    return {p,n,hd,l,a,ignored,total:0};
+  }
   rows.forEach(r=>{
-    const s=offrollStatus(r.__dateStatus[dateKey]);
-    if(s==="P")p++; else if(s==="N")n++; else if(s==="HD")hd++; else if(s==="L")l++; else a++;
+    const raw=offrollRawStatus(r.__dateStatus[dateKey]);
+    if(raw==="P")p++;
+    else if(raw==="N")n++;
+    else if(raw==="HD")hd++;
+    else if(raw==="L")l++;
+    else if(raw==="")a++;       // only a truly blank past/current cell = absent
+    else ignored++;             // NA or any other status is not counted
   });
-  return {p,n,hd,l,a,total:rows.length};
+  return {p,n,hd,l,a,ignored,total:rows.length};
 }
 
 function offrollPopulateFilters(){
@@ -1696,7 +1713,11 @@ function offrollPopulateFilters(){
   fill("offrollVendor",offrollRows.map(r=>r.__vendor),"All Vendors");
   fill("offrollEmpStatus",offrollRows.map(r=>r.__empStatus),"All Employee Status");
   const dateEl=document.getElementById("offrollDate");
-  if(!dateEl.value && offrollDates.length) dateEl.value=offrollDates[offrollDates.length-1].date;
+  if(!dateEl.value && offrollDates.length){
+    const today=offrollTodayKey();
+    const usable=offrollDates.filter(d=>d.date<=today);
+    if(usable.length) dateEl.value=usable[usable.length-1].date;
+  }
 }
 
 function offrollRender(){
@@ -1728,7 +1749,7 @@ function offrollRender(){
 
   hbar("offrollDeptChart","",counts(rows,"Dept"));
 
-  const daily=offrollDates.map(d=>{
+  const daily=offrollDates.filter(d=>d.date<=offrollTodayKey()).map(d=>{
     const c=offrollCountStatus(rows,d.date);
     return [d.date,c.p+c.n];
   }).slice(-14);
@@ -1745,14 +1766,18 @@ function offrollRender(){
   const body=rows.map((r,i)=>{
     let tr=`<tr><td>${esc(r["S.No."]??i+1)}</td><td><b>${esc(r.__empId)}</b></td><td><b>${esc(r.__name)}</b></td><td>${esc(r.__dept)}</td><td>${esc(r["Designation"]??"")}</td><td>${esc(r["DOJ"]??"")}</td><td>${esc(r.__empStatus)}</td><td>${esc(r.__vendor)}</td>`;
     dateCols.forEach(d=>{
-      const s=offrollStatus(r.__dateStatus[d.date]);
-      tr+=`<td class="${offrollStatusClass(s)}" title="${esc(offrollStatusLabel(s))}">${esc(s||"—")}</td>`;
+      const raw=offrollRawStatus(r.__dateStatus[d.date]);
+      const known=offrollStatus(raw);
+      const future=offrollIsFutureDate(d.date);
+      const display=future ? (raw||"—") : (known || (raw ? raw : "—"));
+      const title=future ? "Future date — not counted" : (known ? offrollStatusLabel(known) : (raw ? "Ignored status — not counted" : "Absent"));
+      tr+=`<td class="${future?"":offrollStatusClass(known)}" title="${esc(title)}">${esc(display)}</td>`;
     });
     return tr+"</tr>";
   }).join("");
   document.getElementById("offrollTable").innerHTML=thead+body+"</tbody>";
   document.getElementById("offrollTableNote").textContent =
-    `${rows.length.toLocaleString()} employees • ${attendanceDays} attendance dates • Selected date: ${selected ? formatDateKey(selected) : "not selected"} • P/N counted as present; HD as half day; L as leave; blank as absent.`;
+    `${rows.length.toLocaleString()} employees • ${attendanceDays} attendance dates • Selected date: ${selected ? formatDateKey(selected) : "not selected"} • P/N counted as present; HD as half day; L as leave; blank as absent only for past/current dates; other values (e.g. NA) ignored; future dates not counted.`;
 }
 
 async function loadOffrollFromGoogleSheet(){
@@ -1766,7 +1791,7 @@ async function loadOffrollFromGoogleSheet(){
     if(!text.trim()) throw new Error("Google Sheet returned no data");
     const rows=offrollCsvToRows(text);
     if(!rows.length) throw new Error("No attendance rows found");
-    const required=["Emp ID","Name","Dept","Designation","Status","Vendor"];
+    const required=["Emp ID","Name","Dept","Designation","DOJ","Status","Vendor"];
     const missing=required.filter(k=>!Object.prototype.hasOwnProperty.call(rows[0],k));
     if(missing.length) throw new Error("Missing columns: "+missing.join(", "));
     const prepared=offrollPrepare(rows);
