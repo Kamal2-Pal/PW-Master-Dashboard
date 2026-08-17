@@ -1605,7 +1605,22 @@ function offrollStatusClass(v){
 function offrollCsvToRows(text){
   const wb=XLSX.read(text,{type:"string",cellDates:true});
   const ws=wb.Sheets[wb.SheetNames[0]];
-  return normalizeRows(XLSX.utils.sheet_to_json(ws,{defval:""}));
+
+  // The Google Sheet has a title row ("All Depts Attendance")
+  // above the real column-header row. Row 2 contains the actual headers.
+  const matrix=XLSX.utils.sheet_to_json(ws,{header:1,defval:"",raw:true});
+  if(!matrix.length) return [];
+
+  const headerRowIndex=1; // Google Sheet row 2
+  const headers=(matrix[headerRowIndex]||[]).map(v=>String(v??"").trim());
+
+  return matrix.slice(headerRowIndex+1).map(row=>{
+    const obj={};
+    headers.forEach((h,i)=>{
+      if(h) obj[h]=row[i] ?? "";
+    });
+    return obj;
+  }).filter(r=>Object.keys(r).length);
 }
 
 function offrollPrepare(rows){
@@ -1748,7 +1763,7 @@ async function loadOffrollFromGoogleSheet(){
     offrollRows=prepared;
     offrollPopulateFilters();
     offrollRender();
-    source.textContent=`LIVE Offroll Google Sheet • ${prepared.length.toLocaleString()} employees • ${offrollDates.length} attendance dates • Last loaded ${new Date().toLocaleString()}`;
+    source.textContent=`LIVE Offroll Google Sheet • Daily Attendance (26 July-25 Aug 2026) • ${prepared.length.toLocaleString()} employees • ${offrollDates.length} attendance dates • Last loaded ${new Date().toLocaleString()}`;
     return true;
   }catch(err){
     offrollRows=[];
