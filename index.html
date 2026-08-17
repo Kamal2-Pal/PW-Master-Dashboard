@@ -183,6 +183,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
       <div class="sla-rules">
         <div><span class="dot green-dot"></span><b>Within SLA</b> — Actual Ship in ≤ 48 hours</div>
         <div><span class="dot red-dot"></span><b>Breached</b> — Actual Ship after 48 hours or still open after 48 hours</div>
+        <div><span class="dot"></span><b>Closed / Cancelled</b> — excluded from SLA measurement</div>
         <div><span class="dot amber-dot"></span><b>At Risk</b> — open and due within the next 6 hours</div>
       </div>
     </section>
@@ -247,6 +248,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
       <div class="sla-rules">
         <div><span class="dot green-dot"></span><b>Within SLA</b> — manifest created in ≤ 48 hours</div>
         <div><span class="dot red-dot"></span><b>Breached</b> — manifest created after 48 hours or still open after 48 hours</div>
+        <div><span class="dot"></span><b>Closed / Cancelled</b> — excluded from SLA measurement</div>
         <div><span class="dot amber-dot"></span><b>At Risk</b> — no manifest yet and due within the next 6 hours</div>
       </div>
     </section>
@@ -747,10 +749,12 @@ function buildSlaRows(){
     const shipDate = parseSlaDate(get(r,["Actual_ShipDate","Actual_ShipDate "]));
     const isCancelled = String(get(r,["Status"])).toLowerCase().trim() === "cancelled";
 
-    if(isCancelled){
+    const isClosed = String(get(r,["Status"])).toLowerCase().trim() === "closed";
+
+    if(isCancelled || isClosed){
       return {
         ...r,
-        _sla:"Cancelled",
+        _sla: isCancelled ? "Cancelled" : "Closed",
         _hours:null,
         _due:orderDate ? new Date(orderDate.getTime()+48*3600000) : null,
         _slaMilestone:"Cancelled"
@@ -828,6 +832,7 @@ function renderSla(){
   const openOver48=rows.filter(r=>r._sla==="Open >48H").length;
   const risk=rows.filter(r=>r._sla==="At Risk").length;
   const cancelled=rows.filter(r=>r._sla==="Cancelled").length;
+  const closed=rows.filter(r=>r._sla==="Closed").length;
   const noDate=rows.filter(r=>r._sla==="No Order Create Date").length;
   // SLA % = Within SLA / (Within SLA + Breached).
   // At Risk/Open are still shown separately and do not count as measured.
@@ -852,7 +857,7 @@ function renderSla(){
     ["At Risk",risk,riskPct,"sla-kpi-risk"],
     ["Open < 48H",openUnder48,openUnder48Pct,""],
     ["Open > 48H",openOver48,openOver48Pct,"sla-kpi-bad"],
-    ["Cancelled",cancelled,cancelledPct,""],
+    ["Cancelled / Closed",cancelled+closed,total ? (cancelled+closed)/total*100 : 0,""],
     ["No Create Date",noDate,noDatePct,"sla-kpi-bad"]
   ];
   document.getElementById("slaKpis").innerHTML=cards.map(([k,v,p,cl])=>
@@ -968,7 +973,8 @@ function buildManifestRows(){
     const manifestDate = parseSlaDate(get(r,["Manifest Create Date","Manifest Create Date "]));
     const remarks = String(get(r,["WH remarks","WH Remarks","WH remarks "]) ?? "").trim() || "Blank / No Remarks";
 
-    if(status === "cancelled") return {...r,_manifestSla:"Cancelled",_manifestHours:null,_manifestDue:orderDate?new Date(orderDate.getTime()+48*3600000):null,_whRemarks:remarks};
+    const isClosed = status === "closed";
+    if(status === "cancelled" || isClosed) return {...r,_manifestSla: status === "cancelled" ? "Cancelled" : "Closed",_manifestHours:null,_manifestDue:orderDate?new Date(orderDate.getTime()+48*3600000):null,_whRemarks:remarks};
     if(!orderDate) return {...r,_manifestSla:"No Order Create Date",_manifestHours:null,_manifestDue:null,_whRemarks:remarks};
 
     const due = new Date(orderDate.getTime()+48*3600000);
@@ -1033,6 +1039,7 @@ function renderManifestSla(){
   const risk=rows.filter(r=>r._manifestSla==="At Risk").length;
   const openUnder48=rows.filter(r=>r._manifestSla==="Open <48H").length;
   const openOver48=rows.filter(r=>r._manifestSla==="Open >48H").length;
+  const closedCancelled=rows.filter(r=>r._manifestSla==="Closed" || r._manifestSla==="Cancelled").length;
   // SLA % = Within SLA / (Within SLA + Breached).
   // At Risk/Open are still shown separately and do not count as measured.
   const measured=within+breached;
@@ -1052,7 +1059,8 @@ function renderManifestSla(){
     ["Breached",breached,breachedPct,"sla-kpi-bad"],
     ["At Risk",risk,riskPct,"sla-kpi-risk"],
     ["Open < 48H",openUnder48,openUnder48Pct,""],
-    ["Open > 48H",openOver48,openOver48Pct,"sla-kpi-bad"]
+    ["Open > 48H",openOver48,openOver48Pct,"sla-kpi-bad"],
+    ["Closed / Cancelled",closedCancelled,total ? closedCancelled/total*100 : 0,""]
   ];
   document.getElementById("manifestKpis").innerHTML=cards.map(([k,v,p,cl])=>
     `<div class="kpi ${cl}"><small>${k}</small><strong>${typeof v==="number"?v.toLocaleString():v}</strong>${p!==null?`<span class="kpi-pct">${p.toFixed(1)}% of SLA orders</span>`:""}</div>`).join("");
