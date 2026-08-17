@@ -92,7 +92,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 </head>
 <body>
 <header class="header">
- <div class="title"><div class="logo">V</div><div><h1>Vinculum WMS Dashboard</h1><div class="sub"><span id="sourceText">Loading latest central Vinculum report…</span> <button onclick="refreshLatestFile()" style="margin-left:8px;padding:4px 9px;border-radius:6px;font-size:11px;background:#fff;color:#182230;border:1px solid #d4dbe3">↻ Refresh</button></div></div></div>
+ <div class="title"><div class="logo">V</div><div><h1>Vinculum WMS Dashboard</h1><div class="sub" id="sourceText">Loading latest central Vinculum report…</div></div></div>
  <div class="actions">
    <label class="upload-label primary" for="file">＋ Upload Vinculum Excel</label>
    <button onclick="resetAll()">↻ Reset</button>
@@ -258,7 +258,10 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
     <div class="pill">Bin logic: SPR / MTR / GP B2B</div>
   </div>
 
-  <div class="note" id="pickerSourceLine" style="margin:8px 0 14px">No picker report loaded • upload the latest Picker Report</div>
+  <div class="note" id="pickerSourceLine" style="margin:8px 0 14px">
+  No picker report loaded • upload the latest Picker Report
+  <button id="pickerLiveRefreshBtn" type="button" onclick="refreshPickerLive()" style="margin-left:8px;padding:4px 9px;border-radius:6px;font-size:11px;background:#fff;color:#182230;border:1px solid #d4dbe3;cursor:pointer">↻ Refresh</button>
+</div>
 
   <div class="picker-kpis" id="pickerCards"></div>
 
@@ -437,26 +440,6 @@ function clearFilters() {
   applyFilters();
 }
 function resetAll(){ loadCentralExcel(); }
-
-async function refreshLatestFile(){
-  const btn = event && event.currentTarget ? event.currentTarget : null;
-  if(btn){
-    btn.disabled = true;
-    btn.textContent = "↻ Refreshing…";
-  }
-  document.getElementById("sourceText").textContent = "Refreshing latest central Vinculum report…";
-  try{
-    // Force this button to read the latest GitHub data.xlsx instead of
-    // reusing an older report saved in this browser's local storage.
-    localStorage.removeItem(CENTRAL_LOCAL_STORAGE_KEY);
-    await loadCentralExcel();
-  }finally{
-    if(btn){
-      btn.disabled = false;
-      btn.textContent = "↻ Refresh";
-    }
-  }
-}
 
 function normalizeRows(rows){
   return (rows||[]).map(r=>{
@@ -1280,23 +1263,13 @@ function loadPickerReportLocally(){
 }
 
 async function loadLatestPickerFromGithub(){
-  // First priority: the latest file manually uploaded through the dashboard.
-  // This prevents GitHub Pages from reverting to an older Picker dataset
-  // after a browser refresh.
-  const local=await getPickerLocal();
-  if(local && Array.isArray(local.rows) && local.rows.length){
-    const saved=new Date(local.savedAt||"");
-    const when=isNaN(saved.getTime()) ? "" : ` • saved ${saved.toLocaleString()}`;
-    loadPickerObjects(local.rows,`latest uploaded Picker Report (${local.name||"local file"})${when}`);
-    document.getElementById("pickerDateFilter").value="";
-    renderPicker();
-    return;
-  }
-
-  // No local upload yet: load the GitHub live file.
+  // PUBLIC LIVE PICKER SOURCE:
+  // Every visitor to GitHub Pages reads the same stable CSV maintained by
+  // the Picker GitHub Action. No browser-local Picker copy is used here.
   const path = "picker-reports/latest-picker-report.csv";
+  const cacheBust = Date.now() + "-" + Math.random().toString(36).slice(2);
+
   try{
-    const cacheBust = Date.now() + "-" + Math.random().toString(36).slice(2);
     const response = await fetch(path + "?v=" + cacheBust, {
       cache:"no-store",
       headers:{"Cache-Control":"no-cache"}
@@ -1318,23 +1291,44 @@ async function loadLatestPickerFromGithub(){
     const missing=required.filter(k=>!keys.includes(k));
     if(missing.length) throw new Error("Invalid live Picker report. Missing: "+missing.join(", "));
 
-    loadPickerObjects(data,"latest live Picker Report");
+    loadPickerObjects(data,"LIVE Picker Report");
     document.getElementById("pickerDateFilter").value="";
     renderPicker();
+
+    const stamp = new Date().toLocaleString();
+    document.getElementById("pickerSourceLine").innerHTML =
+      `LIVE Picker Report • ${data.length.toLocaleString()} report rows • Updated/loaded ${stamp}
+       <button id="pickerLiveRefreshBtn" type="button" onclick="refreshPickerLive()" style="margin-left:8px;padding:4px 9px;border-radius:6px;font-size:11px;background:#fff;color:#182230;border:1px solid #d4dbe3;cursor:pointer">↻ Refresh</button>`;
   }catch(err){
     pickerRows=[];
-    document.getElementById("pickerSourceLine").textContent =
-      "No Picker Report loaded — click Upload Picker Report and select the new file";
+    document.getElementById("pickerSourceLine").innerHTML =
+      `LIVE Picker Report unavailable • ${err.message}
+       <button id="pickerLiveRefreshBtn" type="button" onclick="refreshPickerLive()" style="margin-left:8px;padding:4px 9px;border-radius:6px;font-size:11px;background:#fff;color:#182230;border:1px solid #d4dbe3;cursor:pointer">↻ Retry</button>`;
     populatePickerFilters();
     renderPicker();
     console.warn("Live Picker Report unavailable:",err);
   }
 }
 
+async function refreshPickerLive(){
+  const btn=document.getElementById("pickerLiveRefreshBtn");
+  if(btn){
+    btn.disabled=true;
+    btn.textContent="↻ Refreshing…";
+  }
+  document.getElementById("pickerSourceLine").textContent="Refreshing LIVE Picker Report…";
+  try{
+    await loadLatestPickerFromGithub();
+  }finally{
+    const b=document.getElementById("pickerLiveRefreshBtn");
+    if(b){
+      b.disabled=false;
+      b.textContent="↻ Refresh";
+    }
+  }
+}
+
 async function resetPickerReport(){
-  // Reset means: remove the browser's locally uploaded report and return
-  // to the GitHub live source. It does NOT restore any embedded old dataset.
-  await clearPickerLocal();
   document.getElementById("pickerDateFilter").value="";
   await loadLatestPickerFromGithub();
 }
