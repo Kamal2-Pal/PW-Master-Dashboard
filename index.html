@@ -96,6 +96,33 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
   .picker-scope .picker-actions{flex-direction:column;align-items:stretch}
   .picker-scope .picker-actions>*{width:100%;text-align:center}
 }
+
+.offroll-scope{width:100%}
+.offroll-scope *{box-sizing:border-box}
+.offroll-actions{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:18px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:18px}
+.offroll-actions h2{margin:0 0 5px;font-size:22px}
+.offroll-actions p{margin:0;color:#66778a;font-size:13px}
+.offroll-actions button{white-space:nowrap}
+.offroll-kpis{grid-template-columns:repeat(7,1fr)}
+.offroll-kpi-good{border-left:5px solid #20a05a}
+.offroll-kpi-risk{border-left:5px solid #e2a400}
+.offroll-kpi-bad{border-left:5px solid #d64545}
+.offroll-scope .table-wrap{max-height:520px}
+.offroll-scope table{min-width:1100px}
+.offroll-scope th,.offroll-scope td{text-align:left}
+.offroll-scope th.sticky-left{position:sticky;left:0;z-index:3;background:#f7f9fb}
+.offroll-status-p{font-weight:700;color:#187a43}
+.offroll-status-n{font-weight:700;color:#1667b5}
+.offroll-status-hd{font-weight:700;color:#a46d00}
+.offroll-status-l{font-weight:700;color:#c52f2f}
+.offroll-status-a{font-weight:700;color:#c52f2f}
+@media(max-width:1200px){.offroll-kpis{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:650px){
+  .offroll-kpis{grid-template-columns:repeat(2,1fr)}
+  .offroll-actions{align-items:flex-start;flex-direction:column}
+  .offroll-actions button{width:100%}
+}
+
 </style>
 </head>
 <body>
@@ -113,6 +140,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
   <button class="tab" data-tab="slaTab">48H Ship SLA</button>
   <button class="tab" data-tab="manifestSlaTab">48H Manifest SLA</button>
   <button class="tab" data-tab="pickerTab">Picker Report</button>
+  <button class="tab" data-tab="offrollTab">Offroll Attendance</button>
 </div>
 
 <main class="wrap">
@@ -273,6 +301,62 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 
 </main>
 
+
+<section id="offrollTab" class="tab-panel">
+  <div class="offroll-scope">
+    <div class="offroll-actions">
+      <div>
+        <h2>Offroll Attendance Dashboard</h2>
+        <p>LIVE source: Google Sheet • Attendance logic: <b>P</b> Present, <b>N</b> Night Present, <b>L</b> Leave, <b>HD</b> Half Day, blank = Absent.</p>
+      </div>
+      <button id="offrollRefreshBtn" type="button" onclick="refreshOffrollLive()">↻ Refresh Google Sheet</button>
+    </div>
+
+    <div class="coverage-strip" id="offrollSourceLine">LIVE Offroll Google Sheet • loading…</div>
+
+    <div class="kpis offroll-kpis" id="offrollKpis"></div>
+
+    <div class="filters">
+      <div class="field">Department<select id="offrollDept"><option value="">All Departments</option></select></div>
+      <div class="field">Vendor<select id="offrollVendor"><option value="">All Vendors</option></select></div>
+      <div class="field">Employee Status<select id="offrollEmpStatus"><option value="">All Employee Status</option></select></div>
+      <div class="field">Attendance Date<input id="offrollDate" type="date"></div>
+      <div class="field">Employee Search<input id="offrollSearch" type="text" placeholder="Emp ID / Name"></div>
+      <button onclick="clearOffrollFilters()">Clear Filters</button>
+    </div>
+
+    <div class="grid">
+      <section class="card">
+        <div class="section-title">Attendance Status Summary</div>
+        <div id="offrollStatusChart" class="hbars"></div>
+      </section>
+      <section class="card">
+        <div class="section-title">Department-wise Employees</div>
+        <div id="offrollDeptChart" class="hbars"></div>
+      </section>
+      <section class="card">
+        <div class="section-title">Attendance by Date</div>
+        <div id="offrollDayChart" class="chart"></div>
+      </section>
+      <section class="card">
+        <div class="section-title">Attendance Rules</div>
+        <div class="sla-rules">
+          <div><span class="dot green-dot"></span><b>P</b> — Present</div>
+          <div><span class="dot green-dot"></span><b>N</b> — Present in Night</div>
+          <div><span class="dot amber-dot"></span><b>HD</b> — Half Day</div>
+          <div><span class="dot red-dot"></span><b>L</b> — Leave</div>
+          <div><span class="dot red-dot"></span><b>Blank</b> — Absent</div>
+        </div>
+      </section>
+    </div>
+
+    <section class="table-card">
+      <div class="section-title">Employee Attendance</div>
+      <div class="note" id="offrollTableNote"></div>
+      <div class="table-wrap"><table id="offrollTable"></table></div>
+    </section>
+  </div>
+</section>
 
 <section id="pickerTab" class="tab-panel">
   <div class="picker-scope">
@@ -1464,6 +1548,245 @@ async function refreshPickerLive(){
 
 // Initial load: always use the public GitHub live Picker CSV.
 loadLatestPickerFromGithub();
+
+
+/* ===== Offroll Attendance module =====
+   Source: Google Sheet
+   Sheet ID: 1gcfb1tsE4oRb28F98Afi7xu06GAflJocRzUeWwnfvfQ
+   GID: 642260073
+*/
+const OFFROLL_SHEET_ID = "1gcfb1tsE4oRb28F98Afi7xu06GAflJocRzUeWwnfvfQ";
+const OFFROLL_GID = "642260073";
+let offrollRows = [];
+let offrollDates = [];
+
+function offrollNorm(v){ return String(v ?? "").trim(); }
+
+function offrollDateKey(v){
+  const s=offrollNorm(v);
+  if(!s) return "";
+  let d=parseSlaDate(s);
+  if(d && !isNaN(d.getTime())) return [
+    d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")
+  ].join("-");
+  // Google Sheets commonly exposes headers like "26-July" or "1-August".
+  const m=s.match(/^(\d{1,2})[-\s\/]([A-Za-z]+)(?:[-\s\/](\d{4}))?$/);
+  if(m){
+    const monthMap={january:0,february:1,march:2,april:3,may:4,june:5,july:6,august:7,september:8,october:9,november:10,december:11};
+    const mo=monthMap[String(m[2]).toLowerCase()];
+    if(mo!==undefined){
+      const y=Number(m[3]||new Date().getFullYear());
+      const dt=new Date(y,mo,Number(m[1]));
+      if(!isNaN(dt.getTime())) return [dt.getFullYear(),String(dt.getMonth()+1).padStart(2,"0"),String(dt.getDate()).padStart(2,"0")].join("-");
+    }
+  }
+  return "";
+}
+
+function offrollStatus(v){
+  const s=offrollNorm(v).toUpperCase();
+  if(s==="P") return "P";
+  if(s==="N") return "N";
+  if(s==="L") return "L";
+  if(s==="HD") return "HD";
+  return "";
+}
+
+function offrollStatusLabel(v){
+  const s=offrollStatus(v);
+  return s==="P" ? "Present" : s==="N" ? "Night Present" : s==="L" ? "Leave" : s==="HD" ? "Half Day" : "Absent";
+}
+
+function offrollStatusClass(v){
+  const s=offrollStatus(v);
+  return s==="P"?"offroll-status-p":s==="N"?"offroll-status-n":s==="HD"?"offroll-status-hd":s==="L"?"offroll-status-l":"offroll-status-a";
+}
+
+function offrollCsvToRows(text){
+  const wb=XLSX.read(text,{type:"string",cellDates:true});
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  return normalizeRows(XLSX.utils.sheet_to_json(ws,{defval:""}));
+}
+
+function offrollPrepare(rows){
+  if(!rows.length) return [];
+  const first=rows[0];
+  const keys=Object.keys(first);
+  // First nine columns are the employee master fields in the supplied tracker.
+  // Everything after Vendor is treated as a daily attendance column.
+  const base=["S.No.","Emp ID","Name","Father Name","Dept","Designation","DOJ","Status","Vendor"];
+  const dateKeys=keys.filter(k=>!base.includes(k));
+  offrollDates=dateKeys.map(k=>({key:k,label:k,date:offrollDateKey(k)})).filter(x=>x.date);
+  // If duplicate date labels exist, keep the first one.
+  const seen=new Set();
+  offrollDates=offrollDates.filter(x=>{if(seen.has(x.date))return false;seen.add(x.date);return true;}).sort((a,b)=>a.date.localeCompare(b.date));
+  return rows.map(r=>{
+    const x={...r};
+    x.__empId=offrollNorm(r["Emp ID"]);
+    x.__name=offrollNorm(r["Name"]);
+    x.__dept=offrollNorm(r["Dept"]);
+    x.__vendor=offrollNorm(r["Vendor"]);
+    x.__empStatus=offrollNorm(r["Status"]);
+    x.__dateStatus={};
+    offrollDates.forEach(d=>x.__dateStatus[d.date]=offrollStatus(r[d.key]));
+    return x;
+  });
+}
+
+function offrollFilteredRows(){
+  const dept=document.getElementById("offrollDept").value;
+  const vendor=document.getElementById("offrollVendor").value;
+  const empStatus=document.getElementById("offrollEmpStatus").value;
+  const search=offrollNorm(document.getElementById("offrollSearch").value).toLowerCase();
+  return offrollRows.filter(r=>{
+    if(dept && r.__dept!==dept)return false;
+    if(vendor && r.__vendor!==vendor)return false;
+    if(empStatus && r.__empStatus!==empStatus)return false;
+    if(search && !(r.__empId.toLowerCase().includes(search)||r.__name.toLowerCase().includes(search)))return false;
+    return true;
+  });
+}
+
+function offrollSelectedDate(){
+  return document.getElementById("offrollDate").value;
+}
+
+function offrollCountStatus(rows,dateKey){
+  let p=0,n=0,hd=0,l=0,a=0;
+  rows.forEach(r=>{
+    const s=offrollStatus(r.__dateStatus[dateKey]);
+    if(s==="P")p++; else if(s==="N")n++; else if(s==="HD")hd++; else if(s==="L")l++; else a++;
+  });
+  return {p,n,hd,l,a,total:rows.length};
+}
+
+function offrollPopulateFilters(){
+  const fill=(id,vals,label)=>{
+    const el=document.getElementById(id),old=el.value,arr=unique(vals);
+    el.innerHTML=`<option value="">${label}</option>`+arr.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+    if(arr.includes(old))el.value=old;
+  };
+  fill("offrollDept",offrollRows.map(r=>r.__dept),"All Departments");
+  fill("offrollVendor",offrollRows.map(r=>r.__vendor),"All Vendors");
+  fill("offrollEmpStatus",offrollRows.map(r=>r.__empStatus),"All Employee Status");
+  const dateEl=document.getElementById("offrollDate");
+  if(!dateEl.value && offrollDates.length) dateEl.value=offrollDates[offrollDates.length-1].date;
+}
+
+function offrollRender(){
+  const rows=offrollFilteredRows();
+  const selected=offrollSelectedDate();
+  const day=selected ? offrollCountStatus(rows,selected) : {p:0,n:0,hd:0,l:0,a:0,total:rows.length};
+  const attendanceDays=offrollDates.length;
+  const active=rows.filter(r=>r.__empStatus.toLowerCase()==="active").length;
+  const absent=day.a;
+  const present=day.p+day.n;
+  const attendancePct=day.total ? (present/day.total*100) : 0;
+
+  document.getElementById("offrollKpis").innerHTML=[
+    ["Employees",rows.length,""],
+    ["Active Employees",active,""],
+    ["Present (P)",day.p,"offroll-kpi-good"],
+    ["Night Present (N)",day.n,"offroll-kpi-good"],
+    ["Half Day (HD)",day.hd,"offroll-kpi-risk"],
+    ["Leave (L)",day.l,""],
+    ["Absent (Blank)",absent,"offroll-kpi-bad"]
+  ].map(([k,v,c])=>`<div class="kpi ${c}"><small>${k}</small><strong>${Number(v).toLocaleString()}</strong></div>`).join("");
+
+  const statusPairs=[
+    ["Present",day.p],["Night Present",day.n],["Half Day",day.hd],["Leave",day.l],["Absent",day.a]
+  ].filter(x=>x[1]||day.total);
+  hbar("offrollStatusChart","",statusPairs);
+  document.getElementById("offrollStatusChart").insertAdjacentHTML("afterbegin",
+    `<div class="note">${selected ? `Selected date: ${formatDateKey(selected)} • Attendance coverage: ${attendancePct.toFixed(1)}% (P + N)` : "Select an attendance date to see daily status."}</div>`);
+
+  hbar("offrollDeptChart","",counts(rows,"Dept"));
+
+  const daily=offrollDates.map(d=>{
+    const c=offrollCountStatus(rows,d.date);
+    return [d.date,c.p+c.n];
+  }).slice(-14);
+  const max=Math.max(...daily.map(x=>x[1]),1);
+  document.getElementById("offrollDayChart").innerHTML=daily.length ? daily.map(([d,v])=>
+    `<div class="bar"><em>${v}</em><i style="height:${Math.max(2,v/max*190)}px"></i><span>${esc(d.slice(5))}</span></div>`
+  ).join("") : "<div class='note'>No attendance dates found</div>";
+
+  // Employee-wise table. Selected date is shown first, followed by all available days.
+  const dateCols=offrollDates;
+  let thead=`<thead><tr><th class="sticky-left">S.No.</th><th class="sticky-left">Emp ID</th><th class="sticky-left">Name</th><th>Dept</th><th>Designation</th><th>DOJ</th><th>Emp Status</th><th>Vendor</th>`;
+  dateCols.forEach(d=>thead+=`<th>${esc(d.label)}</th>`);
+  thead+="</tr></thead><tbody>";
+  const body=rows.map((r,i)=>{
+    let tr=`<tr><td>${esc(r["S.No."]??i+1)}</td><td><b>${esc(r.__empId)}</b></td><td><b>${esc(r.__name)}</b></td><td>${esc(r.__dept)}</td><td>${esc(r["Designation"]??"")}</td><td>${esc(r["DOJ"]??"")}</td><td>${esc(r.__empStatus)}</td><td>${esc(r.__vendor)}</td>`;
+    dateCols.forEach(d=>{
+      const s=offrollStatus(r.__dateStatus[d.date]);
+      tr+=`<td class="${offrollStatusClass(s)}" title="${esc(offrollStatusLabel(s))}">${esc(s||"—")}</td>`;
+    });
+    return tr+"</tr>";
+  }).join("");
+  document.getElementById("offrollTable").innerHTML=thead+body+"</tbody>";
+  document.getElementById("offrollTableNote").textContent =
+    `${rows.length.toLocaleString()} employees • ${attendanceDays} attendance dates • Selected date: ${selected ? formatDateKey(selected) : "not selected"} • P/N counted as present; HD as half day; L as leave; blank as absent.`;
+}
+
+async function loadOffrollFromGoogleSheet(){
+  const source=document.getElementById("offrollSourceLine");
+  source.textContent="LIVE Offroll Google Sheet • loading…";
+  try{
+    const url=`https://docs.google.com/spreadsheets/d/${OFFROLL_SHEET_ID}/gviz/tq?tqx=out:csv&gid=${OFFROLL_GID}&_=${Date.now()}`;
+    const response=await fetch(url,{cache:"no-store"});
+    if(!response.ok) throw new Error(`Google Sheet returned ${response.status}`);
+    const text=await response.text();
+    if(!text.trim()) throw new Error("Google Sheet returned no data");
+    const rows=offrollCsvToRows(text);
+    if(!rows.length) throw new Error("No attendance rows found");
+    const required=["Emp ID","Name","Dept","Designation","DOJ","Status","Vendor"];
+    const missing=required.filter(k=>!Object.prototype.hasOwnProperty.call(rows[0],k));
+    if(missing.length) throw new Error("Missing columns: "+missing.join(", "));
+    const prepared=offrollPrepare(rows);
+    if(!offrollDates.length) throw new Error("No daily attendance date columns found");
+    offrollRows=prepared;
+    offrollPopulateFilters();
+    offrollRender();
+    source.textContent=`LIVE Offroll Google Sheet • ${prepared.length.toLocaleString()} employees • ${offrollDates.length} attendance dates • Last loaded ${new Date().toLocaleString()}`;
+    return true;
+  }catch(err){
+    offrollRows=[];
+    offrollDates=[];
+    offrollPopulateFilters();
+    offrollRender();
+    source.textContent=`LIVE Offroll Google Sheet unavailable • ${err.message}`;
+    console.warn("Offroll Google Sheet unavailable:",err);
+    return false;
+  }
+}
+
+async function refreshOffrollLive(){
+  const btn=document.getElementById("offrollRefreshBtn");
+  if(btn){btn.disabled=true;btn.textContent="↻ Refreshing…";}
+  try{await loadOffrollFromGoogleSheet();}
+  finally{if(btn){btn.disabled=false;btn.textContent="↻ Refresh Google Sheet";}}
+}
+
+function clearOffrollFilters(){
+  ["offrollDept","offrollVendor","offrollEmpStatus"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("offrollSearch").value="";
+  if(offrollDates.length)document.getElementById("offrollDate").value=offrollDates[offrollDates.length-1].date;
+  offrollRender();
+}
+
+["offrollDept","offrollVendor","offrollEmpStatus","offrollDate","offrollSearch"].forEach(id=>{
+  document.getElementById(id).addEventListener("input",offrollRender);
+  document.getElementById(id).addEventListener("change",offrollRender);
+});
+
+document.querySelectorAll(".tab").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    if(btn.dataset.tab==="offrollTab" && !offrollRows.length) loadOffrollFromGoogleSheet();
+  });
+});
+
+loadOffrollFromGoogleSheet();
 
 </script>
 </body>
