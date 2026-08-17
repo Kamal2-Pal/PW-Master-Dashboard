@@ -97,7 +97,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
    <label class="upload-label primary" for="file">＋ Upload Vinculum Excel</label>
    <button onclick="resetAll()">↻ Reset</button>
  </div>
- <input id="file" type="file" accept=".xlsx,.xls,.csv">
+ <input id="file" type="file" accept=".xlsx,.xlsb,.xlsm,.xls,.csv">
 </header>
 
 <div class="tabs">
@@ -533,8 +533,27 @@ async function loadCentralExcel(){
     applySlaFilters();
     initManifestFilters();
     applyManifestFilters();
-    document.getElementById("sourceText").textContent =
-      `Latest central Vinculum report • ${raw.length.toLocaleString()} report rows • data.xlsx`;
+    const loadedAt = new Date();
+    const stamp = loadedAt.toLocaleString();
+    let metaText = `Loaded ${stamp}`;
+    try {
+      const metaRes = await fetch("data-meta.json?ts="+Date.now(), {cache:"no-store"});
+      if (metaRes.ok) {
+        const meta = await metaRes.json();
+        const metaAt = new Date(meta.updatedAt || "");
+        if (!isNaN(metaAt.getTime())) {
+          metaText = `File updated ${metaAt.toLocaleString()}`;
+        }
+        document.getElementById("sourceText").textContent =
+          `Latest Vinculum report • ${raw.length.toLocaleString()} report rows • ${meta.sourceFile || "data.xlsx"} • ${metaText}`;
+      } else {
+        document.getElementById("sourceText").textContent =
+          `Latest Vinculum report • ${raw.length.toLocaleString()} report rows • data.xlsx • ${metaText}`;
+      }
+    } catch(e) {
+      document.getElementById("sourceText").textContent =
+        `Latest Vinculum report • ${raw.length.toLocaleString()} report rows • data.xlsx • ${metaText}`;
+    }
     syncPickerFromMainUpload(raw,"data.xlsx");
   }catch(err){
     document.getElementById("sourceText").textContent =
@@ -556,7 +575,7 @@ document.getElementById("file").addEventListener("change",async e=>{
     initManifestFilters(); applyManifestFilters();
     syncPickerFromMainUpload(raw,file.name);
     document.getElementById("sourceText").textContent=
-      `Loaded live upload: ${file.name} • ${raw.length.toLocaleString()} report rows`;
+      `Live upload • ${raw.length.toLocaleString()} report rows • ${file.name} • uploaded ${new Date().toLocaleString()}`;
   }catch(err){
     alert("File read nahi ho payi: "+err.message);
   }finally{
