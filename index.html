@@ -478,7 +478,48 @@ function parseWorkbookBuffer(buffer){
   return normalizeRows(XLSX.utils.sheet_to_json(ws,{defval:""}));
 }
 
+const CENTRAL_LOCAL_STORAGE_KEY = "vinculum_central_report_v2";
+
+function saveCentralReportLocally(data, name){
+  try{
+    localStorage.setItem(CENTRAL_LOCAL_STORAGE_KEY, JSON.stringify({
+      name: name || "Uploaded Vinculum Excel",
+      rows: data || [],
+      savedAt: new Date().toISOString()
+    }));
+    return true;
+  }catch(err){
+    console.warn("Could not save central report locally:", err);
+    return false;
+  }
+}
+
+function loadCentralReportLocally(){
+  try{
+    const saved=localStorage.getItem(CENTRAL_LOCAL_STORAGE_KEY);
+    if(!saved) return false;
+    const obj=JSON.parse(saved);
+    if(!obj || !Array.isArray(obj.rows) || !obj.rows.length) return false;
+    raw=obj.rows;
+    populateFilters(); clearFilters();
+    initSlaFilters(); applySlaFilters();
+    initManifestFilters(); applyManifestFilters();
+    const savedAt=new Date(obj.savedAt||"");
+    const when=isNaN(savedAt.getTime()) ? "" : ` • saved ${savedAt.toLocaleString()}`;
+    document.getElementById("sourceText").textContent =
+      `Latest uploaded Vinculum report • ${raw.length.toLocaleString()} report rows • ${obj.name||"local file"}${when}`;
+    syncPickerFromMainUpload(raw,obj.name||"uploaded file");
+    return true;
+  }catch(err){
+    console.warn("Could not load saved central report:", err);
+    return false;
+  }
+}
+
 async function loadCentralExcel(){
+  // Browser upload is the first priority, so a refresh never falls back
+  // to stale data.xlsx after the user has selected a newer report.
+  if(loadCentralReportLocally()) return;
   try{
     const response = await fetch("data.xlsx?ts="+Date.now(), {cache:"no-store"});
     if(!response.ok) throw new Error("data.xlsx not found");
@@ -494,9 +535,10 @@ async function loadCentralExcel(){
     applyManifestFilters();
     document.getElementById("sourceText").textContent =
       `Latest central Vinculum report • ${raw.length.toLocaleString()} report rows • data.xlsx`;
+    syncPickerFromMainUpload(raw,"data.xlsx");
   }catch(err){
     document.getElementById("sourceText").textContent =
-      "Central data.xlsx load failed — use Upload Vinculum Excel";
+      "Central report load failed — use Upload Vinculum Excel";
     populateFilters();
     render();
   }
@@ -505,14 +547,20 @@ async function loadCentralExcel(){
 document.getElementById("file").addEventListener("change",async e=>{
   const file=e.target.files[0]; if(!file)return;
   try{
-    raw=parseWorkbookBuffer(await file.arrayBuffer());
+    const data=parseWorkbookBuffer(await file.arrayBuffer());
+    if(!data.length) throw new Error("Excel file is empty");
+    raw=data;
+    saveCentralReportLocally(raw,file.name);
     populateFilters(); clearFilters();
     initSlaFilters(); applySlaFilters();
     initManifestFilters(); applyManifestFilters();
     syncPickerFromMainUpload(raw,file.name);
-    document.getElementById("sourceText").textContent=`Loaded: ${file.name} • ${raw.length.toLocaleString()} report rows`;
+    document.getElementById("sourceText").textContent=
+      `Loaded live upload: ${file.name} • ${raw.length.toLocaleString()} report rows`;
   }catch(err){
     alert("File read nahi ho payi: "+err.message);
+  }finally{
+    e.target.value="";
   }
 });
 
