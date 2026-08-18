@@ -172,6 +172,18 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
   .offroll-view-actions button{flex:1}
 }
 
+
+/* ===== B2C Dashboard ===== */
+.b2c-scope{width:100%}.b2c-scope *{box-sizing:border-box}
+.b2c-hero{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:18px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:18px}
+.b2c-hero h2{margin:0 0 5px;font-size:22px}.b2c-hero p{margin:0;color:#66778a;font-size:13px}
+.b2c-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.b2c-upload{display:inline-block;background:#0b67d1;color:#fff;padding:10px 14px;border-radius:8px;font-weight:700;cursor:pointer}
+.b2c-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:14px}.b2c-kpi{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:16px}.b2c-kpi .v{font-size:25px;font-weight:800}.b2c-kpi .l{font-size:12px;color:#66778a;margin-top:4px}
+.b2c-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.b2c-card{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:16px;margin-bottom:14px}
+.b2c-card h3{margin:0 0 12px}.b2c-note{font-size:12px;color:#66778a;margin:6px 0 12px}.b2c-table-wrap{overflow:auto}.b2c-scope table{width:100%;border-collapse:collapse;min-width:720px}.b2c-scope th,.b2c-scope td{padding:10px;border-bottom:1px solid #e6ebf0;text-align:right;white-space:nowrap}.b2c-scope th:first-child,.b2c-scope td:first-child{text-align:left}.b2c-scope th{background:#f7f9fb;color:#4d6478;font-size:12px;text-transform:uppercase}.b2c-scope td{font-size:13px}
+.b2c-good{color:#168047;font-weight:800}.b2c-bad{color:#c52f2f;font-weight:800}.b2c-muted{color:#66778a}
+@media(max-width:1000px){.b2c-kpis{grid-template-columns:repeat(3,1fr)}.b2c-grid{grid-template-columns:1fr}}
+@media(max-width:650px){.b2c-kpis{grid-template-columns:1fr 1fr}.b2c-hero{align-items:flex-start;flex-direction:column}.b2c-actions{width:100%}.b2c-upload,.b2c-actions button{width:100%;text-align:center}}
 </style>
 </head>
 <body>
@@ -192,6 +204,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
   <button class="tab" data-tab="pickerTab">Picker Report</button>
   <button class="tab" data-tab="offrollTab">Offroll Attendance</button>
   <button class="tab" data-tab="offrollViewTab">Offroll Attendance View</button>
+  <button class="tab" data-tab="b2cTab">B2C Dashboard</button>
 </div>
 
 <main class="wrap">
@@ -350,6 +363,48 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
     <div class="table-wrap"><table><thead><tr><th>WH Remarks</th><th>Breached Orders</th><th>% of Breached</th></tr></thead><tbody id="remarksTbody"></tbody></table></div>
   </section>
 
+
+<section id="b2cTab" class="tab-panel">
+ <div class="b2c-scope">
+  <div class="b2c-hero">
+   <div>
+    <h2>B2C Dashboard</h2>
+    <p id="b2cSource">Upload B2C Dashboard.xlsb to load the latest B2C data.</p>
+   </div>
+   <div class="b2c-actions">
+    <label class="b2c-upload" for="b2cFile">＋ Upload B2C Excel</label>
+    <input id="b2cFile" type="file" accept=".xlsb,.xlsx,.xls,.csv" style="display:none">
+    <button type="button" onclick="b2cReset()">↻ Reset</button>
+   </div>
+  </div>
+
+  <div class="b2c-kpis" id="b2cKpis"></div>
+
+  <div class="b2c-card">
+   <h3>Channel-wise SLA Summary</h3>
+   <div class="b2c-note">Ship By channels: <b>Order create date → Ship By Date</b> target, measured against actual ship date. 24-hour channels: <b>Order create date → Actual Ship Date</b>.</div>
+   <div class="b2c-table-wrap"><table id="b2cChannelTable"></table></div>
+  </div>
+
+  <div class="b2c-card">
+   <h3>Ship By Date Summary</h3>
+   <div class="b2c-note">Meesho, Cloudtail DF, Flipkart_SKD, Amazon EasyShip and FirstCry.</div>
+   <div class="b2c-table-wrap"><table id="b2cShipByTable"></table></div>
+  </div>
+
+  <div class="b2c-card">
+   <h3>24 Hours Summary</h3>
+   <div class="b2c-note">Shopify, PW_Store and Manual_Orders. Target = actual ship within 24 hours of order creation.</div>
+   <div class="b2c-table-wrap"><table id="b2c24Table"></table></div>
+  </div>
+
+  <div class="b2c-card">
+   <h3>Weekly Allocation → Pack Summary</h3>
+   <div class="b2c-note">Duration = <b>Pack Date − AllocationTime</b>, grouped by pack week. Orders without both timestamps are excluded.</div>
+   <div class="b2c-table-wrap"><table id="b2cWeeklyTable"></table></div>
+  </div>
+ </div>
+</section>
 </main>
 
 
@@ -2202,5 +2257,174 @@ document.querySelectorAll(".tab").forEach(btn=>{
 </script>
 <!-- Total-link page-view counter only. Existing dashboard tabs/data logic are unchanged. -->
 <script src="https://counterapi.com/c.js" async></script>
+
+<script>
+/* ===== B2C Dashboard ===== */
+let b2cRows=[];
+
+const B2C_SHIPBY=["Meesho","Cloudtail DF","Flipkart_SKD","Amazon EasyShip","FirstCry"];
+const B2C_24H=["Shopify","PW_Store","Manual_Orders"];
+
+function b2cVal(r,names){
+  for(const n of names){
+    if(Object.prototype.hasOwnProperty.call(r,n)) return r[n];
+  }
+  return "";
+}
+function b2cText(v){return String(v??"").trim();}
+function b2cDate(v){
+  if(v instanceof Date && !isNaN(v)) return v;
+  if(typeof v==="number"){
+    const d=new Date(Math.round((v-25569)*86400*1000));
+    return isNaN(d)?null:d;
+  }
+  const s=b2cText(v);
+  if(!s) return null;
+  let d=new Date(s.replace(" ","T"));
+  if(!isNaN(d)) return d;
+  d=new Date(s);
+  return isNaN(d)?null:d;
+}
+function b2cHours(a,b){
+  const x=b2cDate(a), y=b2cDate(b);
+  if(!x||!y) return null;
+  return (y-x)/36e5;
+}
+function b2cChannel(r){
+  const v=b2cText(b2cVal(r,["Channel Name"]));
+  return v || "";
+}
+function b2cOrderLevel(rows){
+  const m=new Map();
+  rows.forEach((r,i)=>{
+    const id=b2cText(r["Order No"]) || "__ROW_"+i;
+    if(!m.has(id)){m.set(id,{...r});return;}
+    const t=m.get(id);
+    Object.keys(r).forEach(k=>{
+      if((t[k]===""||t[k]==null) && r[k]!=="" && r[k]!=null)t[k]=r[k];
+    });
+    // Keep earliest creation/allocation and earliest actual ship where available.
+    [["Order create date"],["OrderDate"],["AllocationTime"],["Actual_ShipDate ","Actual_ShipDate"],["Ship By Date"]].forEach(names=>{
+      const a=b2cDate(b2cVal(t,names)), b=b2cDate(b2cVal(r,names));
+      if(!a&&b)t[names[0]]=b2cVal(r,names);
+      else if(a&&b&&b<a)t[names[0]]=b2cVal(r,names);
+    });
+  });
+  return [...m.values()];
+}
+function b2cFmt(n,d=1){return Number.isFinite(n)?n.toFixed(d):"—";}
+function b2cPct(ok,total){return total?((ok/total)*100).toFixed(1)+"%":"—";}
+function b2cWeek(d){
+  const x=new Date(d); x.setHours(0,0,0,0);
+  const day=x.getDay()||7;
+  x.setDate(x.getDate()-day+1);
+  return x.toISOString().slice(0,10);
+}
+function b2cSetTable(id,headers,rows){
+  const el=document.getElementById(id);
+  el.innerHTML="<thead><tr>"+headers.map(h=>`<th>${h}</th>`).join("")+"</tr></thead><tbody>"+
+    rows.map(r=>"<tr>"+r.map(c=>`<td>${c}</td>`).join("")+"</tr>").join("")+"</tbody>";
+}
+function b2cSummaryFor(channels){
+  const out=[];
+  channels.forEach(ch=>{
+    const rows=b2cRows.filter(r=>b2cChannel(r).toLowerCase()===ch.toLowerCase());
+    let eligible=0,on=0,breach=0,pending=0,sum=0;
+    rows.forEach(r=>{
+      const created=b2cVal(r,["Order create date","OrderDate"]);
+      const actual=b2cVal(r,["Actual_ShipDate ","Actual_ShipDate"]);
+      const by=b2cVal(r,["Ship By Date"]);
+      const ah=b2cHours(created,actual);
+      const bh=b2cHours(created,by);
+      if(ah!=null && bh!=null){
+        eligible++; sum+=ah;
+        if(actual && by && b2cDate(actual)<=b2cDate(by)) on++; else breach++;
+      }else if(actual===""||actual==null||b2cText(actual)==="") pending++;
+    });
+    out.push({ch,total:rows.length,eligible,on,breach,pending,avg:eligible?sum/eligible:null});
+  });
+  return out;
+}
+function b2cRender(){
+  const ship=b2cSummaryFor(B2C_SHIPBY), h24=b2cSummaryFor(B2C_24H);
+  const all=[...ship,...h24];
+  const total=all.reduce((a,x)=>a+x.total,0);
+  const eligible=all.reduce((a,x)=>a+x.eligible,0);
+  const on=all.reduce((a,x)=>a+x.on,0);
+  const breach=all.reduce((a,x)=>a+x.breach,0);
+  document.getElementById("b2cKpis").innerHTML=[
+    ["Orders",total,""],
+    ["Eligible SLA",eligible,""],
+    ["On Time",on,"b2c-good"],
+    ["Breached",breach,"b2c-bad"],
+    ["Pending / No Actual Ship",all.reduce((a,x)=>a+x.pending,0),"b2c-muted"]
+  ].map(x=>`<div class="b2c-kpi"><div class="v ${x[2]}">${x[1].toLocaleString()}</div><div class="l">${x[0]}</div></div>`).join("");
+
+  const renderRows=(arr,mode)=>arr.map(x=>[
+    x.ch, x.total.toLocaleString(), x.eligible.toLocaleString(),
+    x.on.toLocaleString(), x.breach.toLocaleString(),
+    x.pending.toLocaleString(), b2cPct(x.on,x.eligible),
+    x.avg==null?"—":b2cFmt(x.avg)+" h"
+  ]);
+  b2cSetTable("b2cChannelTable",["Channel","Orders","Eligible","On Time","Breach","Pending","On-Time %","Avg Actual Ship"],renderRows(all));
+  b2cSetTable("b2cShipByTable",["Channel","Orders","Eligible","On Time","Breach","Pending","On-Time %","Avg Actual Ship"],renderRows(ship));
+  b2cSetTable("b2c24Table",["Channel","Orders","Eligible","≤24H","Breach","Pending","≤24H %","Avg Actual Ship"],h24.map(x=>[
+    x.ch,x.total.toLocaleString(),x.eligible.toLocaleString(),x.on.toLocaleString(),
+    x.breach.toLocaleString(),x.pending.toLocaleString(),b2cPct(x.on,x.eligible),
+    x.avg==null?"—":b2cFmt(x.avg)+" h"
+  ]));
+
+  const weeks={};
+  b2cRows.forEach(r=>{
+    const a=b2cDate(r["AllocationTime"]), p=b2cDate(r["Pack Date"]);
+    if(!a||!p) return;
+    const h=(p-a)/36e5;
+    if(h<0) return;
+    const w=b2cWeek(p);
+    if(!weeks[w])weeks[w]={orders:0,sum:0,under24:0,over24:0};
+    weeks[w].orders++;weeks[w].sum+=h;
+    if(h<=24)weeks[w].under24++;else weeks[w].over24++;
+  });
+  const weekly=Object.keys(weeks).sort().reverse().map(w=>{
+    const x=weeks[w];
+    return [w,x.orders.toLocaleString(),b2cFmt(x.sum/x.orders)+" h",x.under24.toLocaleString(),x.over24.toLocaleString(),b2cPct(x.under24,x.orders)];
+  });
+  b2cSetTable("b2cWeeklyTable",["Week Starting","Orders","Avg Allocation → Pack","≤24H"," >24H","≤24H %"],weekly);
+}
+function b2cReset(){
+  b2cRows=[];
+  document.getElementById("b2cSource").textContent="Upload B2C Dashboard.xlsb to load the latest B2C data.";
+  ["b2cKpis","b2cChannelTable","b2cShipByTable","b2c24Table","b2cWeeklyTable"].forEach(id=>document.getElementById(id).innerHTML="");
+}
+document.getElementById("b2cFile").addEventListener("change",async e=>{
+  const f=e.target.files[0]; if(!f)return;
+  const src=document.getElementById("b2cSource");
+  src.textContent="Loading B2C data…";
+  try{
+    const data=await f.arrayBuffer();
+    const wb=XLSX.read(data,{type:"array",cellDates:true});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{defval:"",raw:true});
+    if(!rows.length)throw new Error("No B2C rows found");
+    const needed=["Order No","Order create date","Ship By Date","Actual_ShipDate ","AllocationTime","Pack Date","Channel Name"];
+    const missing=needed.filter(k=>!Object.prototype.hasOwnProperty.call(rows[0],k));
+    if(missing.length)throw new Error("Missing columns: "+missing.join(", "));
+    b2cRows=b2cOrderLevel(rows);
+    b2cRender();
+    src.textContent=`B2C Dashboard • ${b2cRows.length.toLocaleString()} orders • ${new Date().toLocaleString()}`;
+  }catch(err){
+    b2cReset();
+    src.textContent="B2C data unavailable • "+err.message;
+    console.warn("B2C load error",err);
+  }
+});
+document.querySelectorAll(".tab").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    if(btn.dataset.tab==="b2cTab" && !b2cRows.length){
+      document.getElementById("b2cSource").textContent="Upload the B2C Excel file to load data.";
+    }
+  });
+});
+</script>
 </body>
 </html>
