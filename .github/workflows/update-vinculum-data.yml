@@ -7,6 +7,9 @@ on:
       - "data-meta.json"
       - "picker-data.csv"
       - "picker-data-meta.json"
+      - "b2c/**"
+      - "b2c-data.json"
+      - "b2c-data-meta.json"
   workflow_dispatch:
 
 permissions:
@@ -38,25 +41,24 @@ jobs:
         run: |
           set -euo pipefail
 
-          # On an upload commit, use ONLY Excel files that were actually
-          # added/modified in that commit. This prevents an older .xlsb
-          # sitting in the repository from being selected accidentally.
+          # Only Excel files changed by this commit, excluding all B2C files.
           SOURCE="$(
             git diff-tree --no-commit-id --name-only --diff-filter=ACMR -r "$GITHUB_SHA" \
             | grep -Ei '\.(xlsx|xlsb|xlsm|xls)$' \
+            | grep -Ev '(^|/)b2c/' \
             | grep -Ev '(^|/)(data\.xlsx|data-meta\.json)$' \
             | head -n 1 || true
           )"
 
-          # Manual "Run workflow" fallback: choose the Excel file with the
-          # newest Git commit touching that file, excluding generated files.
+          # Manual "Run workflow" fallback: choose the newest committed
+          # non-B2C Excel file.
           if [ -z "$SOURCE" ]; then
             best=""
             best_ts=0
 
             while IFS= read -r f; do
               case "$f" in
-                data.xlsx|*.meta.xlsx|data-meta.json) continue ;;
+                data.xlsx|*.meta.xlsx|data-meta.json|b2c/*) continue ;;
               esac
 
               ts="$(git log -1 --format=%ct -- "$f" 2>/dev/null || echo 0)"
@@ -70,7 +72,7 @@ jobs:
           fi
 
           if [ -z "$SOURCE" ]; then
-            echo "No Vinculum Excel source file found."
+            echo "No Vinculum Excel source file found outside b2c/."
             exit 1
           fi
 
@@ -105,17 +107,18 @@ jobs:
           print(f"Reading: {source} using {engine}")
           df = pd.read_excel(source, sheet_name=0, engine=engine, dtype=object)
 
-          # Keep the dashboard's existing column names exactly as supplied
-          # by the uploaded report, while removing completely empty columns.
           df = df.dropna(axis=1, how="all")
 
-          # Convert pandas timestamps to Excel-compatible datetimes.
           for col in df.columns:
               if pd.api.types.is_datetime64_any_dtype(df[col]):
                   df[col] = df[col].where(df[col].notna(), None)
 
           out = Path("data.xlsx")
-          with pd.ExcelWriter(out, engine="openpyxl", datetime_format="yyyy-mm-dd hh:mm:ss") as writer:
+          with pd.ExcelWriter(
+              out,
+              engine="openpyxl",
+              datetime_format="yyyy-mm-dd hh:mm:ss"
+          ) as writer:
               df.to_excel(writer, index=False, sheet_name="Data")
 
           meta = {
@@ -125,6 +128,7 @@ jobs:
               "rows": int(len(df)),
               "columns": int(len(df.columns))
           }
+
           Path("data-meta.json").write_text(
               json.dumps(meta, indent=2),
               encoding="utf-8"
