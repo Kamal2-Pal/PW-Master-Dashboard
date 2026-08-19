@@ -1,14 +1,9 @@
-update-b2c-data-fixed.yml
-
-
 name: Update latest B2C data
 
 on:
   push:
     paths:
-      - "b2c/**"
-      - "!b2c-data.json"
-      - "!b2c-data-meta.json"
+      - 'b2c/**'
   workflow_dispatch:
 
 permissions:
@@ -27,7 +22,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: '3.12'
 
       - name: Install Excel readers
         run: |
@@ -40,35 +35,34 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Prefer an Excel file changed in THIS commit.
           SOURCE="$(
             git diff-tree --no-commit-id --name-only --diff-filter=ACMR -r "$GITHUB_SHA" |
             grep -Ei '^b2c/.*\.(xlsx|xlsb|xlsm|xls)$' |
             head -n 1 || true
           )
 
-          # Manual workflow fallback: choose the B2C Excel file with the
-          # newest commit touching that file.
           if [ -z "$SOURCE" ]; then
             best=""
             best_ts=0
 
             while IFS= read -r f; do
               ts="$(git log -1 --format=%ct -- "$f" 2>/dev/null || echo 0)"
+
               if [ "$ts" -gt "$best_ts" ]; then
                 best_ts="$ts"
                 best="$f"
               fi
             done < <(
-              git ls-files 'b2c/*.xlsx' 'b2c/*.xlsb' 'b2c/*.xlsm' 'b2c/*.xls' |
-              sort
+              git ls-files |
+              grep -Ei '^b2c/.*\.(xlsx|xlsb|xlsm|xls)$' ||
+              true
             )
 
             SOURCE="$best"
           fi
 
           if [ -z "$SOURCE" ]; then
-            echo "No B2C Excel source found under b2c/."
+            echo "No B2C Excel source found under b2c/"
             exit 1
           fi
 
@@ -106,7 +100,7 @@ jobs:
               source,
               sheet_name="Export",
               engine=engine,
-              dtype=object,
+              dtype=object
           )
 
           required = [
@@ -114,10 +108,11 @@ jobs:
               "Order create date",
               "Ship By Date",
               "Actual_ShipDate ",
-              "Channel Name",
+              "Channel Name"
           ]
 
           missing = [c for c in required if c not in df.columns]
+
           if missing:
               raise ValueError(
                   "Missing required B2C columns: " + ", ".join(missing)
@@ -126,28 +121,30 @@ jobs:
           def clean(value):
               if pd.isna(value):
                   return ""
+
               if isinstance(value, pd.Timestamp):
                   return value.strftime("%Y-%m-%d %H:%M:%S")
+
               return str(value).strip()
 
-          rows = [
-              {
+          rows = []
+
+          for r in df[required].itertuples(index=False, name=None):
+              rows.append({
                   "o": clean(r[0]),
                   "cr": clean(r[1]),
                   "sb": clean(r[2]),
                   "as": clean(r[3]),
-                  "c": clean(r[4]),
-              }
-              for r in df[required].itertuples(index=False, name=None)
-          ]
+                  "c": clean(r[4])
+              })
 
           Path("b2c-data.json").write_text(
               json.dumps(
                   rows,
                   ensure_ascii=False,
-                  separators=(",", ":"),
+                  separators=(",", ":")
               ),
-              encoding="utf-8",
+              encoding="utf-8"
           )
 
           meta = {
@@ -159,12 +156,12 @@ jobs:
               "channels": sorted(
                   str(x).strip()
                   for x in df["Channel Name"].dropna().unique()
-              ),
+              )
           }
 
           Path("b2c-data-meta.json").write_text(
               json.dumps(meta, indent=2),
-              encoding="utf-8",
+              encoding="utf-8"
           )
 
           print(json.dumps(meta, indent=2))
