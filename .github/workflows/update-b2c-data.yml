@@ -1,0 +1,127 @@
+name: Update latest B2C data
+
+on:
+  push:
+    paths:
+      - "b2c/*.xlsx"
+      - "b2c/*.xlsb"
+      - "b2c/*.xlsm"
+      - "b2c/*.xls"
+      - "!b2c-data.json"
+      - "!b2c-data-meta.json"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-b2c-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Excel readers
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas openpyxl pyxlsb xlrd
+
+      - name: Find newly uploaded B2C Excel
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SOURCE="$(
+            git diff-tree --no-commit-id --name-only --diff-filter=ACMR -r "$GITHUB_SHA" |
+            grep -Ei '^b2c/.*\.(xlsx|xlsb|xlsm|xls)$' |
+            head -n 1 || true
+          )
+
+          if [ -z "$SOURCE" ]; then
+            best=""
+            best_ts=0
+            while IFS= read -r f; do
+              ts="$(git log -1 --format=%ct -- "$f" 2>/dev/null || echo 0)"
+              if [ "$ts" -gt "$best_ts" ]; then
+                best_ts="$ts"
+                best="$f"
+              fi
+            done < <(git ls-files 'b2c/*.xlsx' 'b2c/*.xlsb' 'b2c/*.xlsm' 'b2c/*.xls' || true)
+            SOURCE="$best"
+          fi
+
+          if [ -z "$SOURCE" ]; then
+            echo "No B2C Excel source found under b2c/."
+            exit 1
+          fi
+
+          echo "Selected B2C source: $SOURCE"
+          echo "path=$SOURCE" >> "$GITHUB_OUTPUT"
+
+      - name: Build B2C JSON
+        env:
+          SOURCE_FILE: ${{ steps.source.outputs.path }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from datetime import datetime, timezone
+          import pandas as pd
+
+          source = Path(os.environ["SOURCE_FILE"])
+          suffix = source.suffix.lower()
+          engine = "pyxlsb" if suffix == ".xlsb" else ("xlrd" if suffix == ".xls" else "openpyxl")
+
+          df = pd.read_excel(source, sheet_name="Export", engine=engine, dtype=object)
+
+          required = ["Order No","Order create date","Ship By Date","Actual_ShipDate ","Channel Name"]
+          missing = [c for c in required if c not in df.columns]
+          if missing:
+              raise ValueError("Missing required B2C columns: " + ", ".join(missing))
+
+          def clean(v):
+              if pd.isna(v): return ""
+              if isinstance(v, pd.Timestamp): return v.strftime("%Y-%m-%d %H:%M:%S")
+              return str(v).strip()
+
+          rows = [{"o":clean(r[0]),"cr":clean(r[1]),"sb":clean(r[2]),"as":clean(r[3]),"c":clean(r[4])}
+                  for r in df[required].itertuples(index=False, name=None)]
+
+          Path("b2c-data.json").write_text(json.dumps(rows,ensure_ascii=False,separators=(",",":")),encoding="utf-8")
+
+          meta = {
+              "sourceFile": source.name,
+              "sourcePath": str(source),
+              "updatedAt": datetime.now(timezone.utc).isoformat(),
+              "lineItems": len(df),
+              "uniqueOrders": int(df["Order No"].nunique()),
+              "channels": sorted(str(x).strip() for x in df["Channel Name"].dropna().unique())
+          }
+          Path("b2c-data-meta.json").write_text(json.dumps(meta,indent=2),encoding="utf-8")
+          print(json.dumps(meta,indent=2))
+          PY
+
+      - name: Commit latest B2C data
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot].users.noreply.github.com"
+          git add b2c-data.json b2c-data-meta.json
+          if git diff --cached --quiet; then
+            echo "No B2C data changes to commit."
+            exit 0
+          fi
+          git commit -m "Update latest B2C dashboard data"
+          git push
