@@ -1,3 +1,6 @@
+update-b2c-data-fixed.yml
+
+
 name: Update latest B2C data
 
 on:
@@ -37,11 +40,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Prefer Excel files changed in THIS commit.
+          # Prefer an Excel file changed in THIS commit.
           SOURCE="$(
-            git diff-tree --no-commit-id --name-only --diff-filter=ACMR -r "$GITHUB_SHA" \
-            | grep -Ei '^b2c/.*\.(xlsx|xlsb|xlsm|xls)$' \
-            | head -n 1 || true
+            git diff-tree --no-commit-id --name-only --diff-filter=ACMR -r "$GITHUB_SHA" |
+            grep -Ei '^b2c/.*\.(xlsx|xlsb|xlsm|xls)$' |
+            head -n 1 || true
           )
 
           # Manual workflow fallback: choose the B2C Excel file with the
@@ -57,8 +60,8 @@ jobs:
                 best="$f"
               fi
             done < <(
-              git ls-files 'b2c/*.xlsx' 'b2c/*.xlsb' 'b2c/*.xlsm' 'b2c/*.xls' \
-              | sort
+              git ls-files 'b2c/*.xlsx' 'b2c/*.xlsb' 'b2c/*.xlsm' 'b2c/*.xls' |
+              sort
             )
 
             SOURCE="$best"
@@ -99,12 +102,11 @@ jobs:
 
           print(f"Reading B2C source: {source} using {engine}")
 
-          # Keep the existing B2C Export-sheet contract.
           df = pd.read_excel(
               source,
               sheet_name="Export",
               engine=engine,
-              dtype=object
+              dtype=object,
           )
 
           required = [
@@ -139,12 +141,11 @@ jobs:
               for r in df[required].itertuples(index=False, name=None)
           ]
 
-          # These are B2C-only generated files.
           Path("b2c-data.json").write_text(
               json.dumps(
                   rows,
                   ensure_ascii=False,
-                  separators=(",", ":")
+                  separators=(",", ":"),
               ),
               encoding="utf-8",
           )
