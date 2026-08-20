@@ -1,3 +1,246 @@
+<!-- B2C summary patch: paste this block immediately before </body> in the current index.html.
+     It keeps the existing B2B / Picker / Attendance / Vinculum code untouched. -->
+
+<style>
+  .b2c-extra-summary{margin:14px 0}
+  .b2c-extra-summary .summary-note{margin:-5px 0 12px;color:#66778a;font-size:12px}
+  .b2c-extra-summary .table-wrap{overflow:auto}
+  .b2c-extra-summary table{width:100%;border-collapse:collapse;font-size:12px;min-width:850px}
+  .b2c-extra-summary th,.b2c-extra-summary td{padding:9px 10px;border-bottom:1px solid #edf0f3;text-align:right;white-space:nowrap}
+  .b2c-extra-summary th:first-child,.b2c-extra-summary td:first-child{text-align:left}
+  .b2c-extra-summary th{background:#f7f9fb}
+  .b2c-extra-summary .good{color:#187a43;font-weight:800}
+  .b2c-extra-summary .bad{color:#c52f2f;font-weight:800}
+</style>
+
+<script>
+(function(){
+  "use strict";
+
+  function b2cExtraRows(){
+    if(typeof b2cFilteredRaw === "function") return b2cFilteredRaw();
+    if(typeof b2cSourceRows === "function") return b2cSourceRows();
+    return [];
+  }
+
+  function val(row, names){
+    for(const n of names){
+      if(Object.prototype.hasOwnProperty.call(row,n) && row[n] !== "" && row[n] != null) return row[n];
+    }
+    return "";
+  }
+
+  function dt(v){
+    if(typeof parseSlaDate === "function") return parseSlaDate(v);
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function hours(a,b){
+    const x=dt(a), y=dt(b);
+    return x && y ? (y-x)/3600000 : null;
+  }
+
+  function dateKey(v){
+    const d=dt(v);
+    return d ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}` : "";
+  }
+
+  function channel(r){
+    return typeof b2cChannel === "function" ? (b2cChannel(r) || val(r,["finance_category","Finance Category"]) || "Unknown") : (val(r,["finance_category","Finance Category"]) || "Unknown");
+  }
+
+  function qty(r){
+    const n=Number(String(val(r,["Order Qty","Qty"])||0).replace(/,/g,""));
+    return isFinite(n) ? n : 0;
+  }
+
+  function status(r){
+    if(typeof b2cUnifiedStatus === "function"){
+      const x=b2cUnifiedStatus(r);
+      if(x && x.status) return x.status;
+    }
+    return val(r,["Status"]) || "Blank / Unknown";
+  }
+
+  function filteredByCurrentDates(rows){
+    const f=document.getElementById("b2cFrom")?.value || "";
+    const t=document.getElementById("b2cTo")?.value || "";
+    const ch=document.getElementById("b2cChannel")?.value || "";
+    return rows.filter(r=>{
+      const c=channel(r);
+      if(ch && c!==ch) return false;
+      const d=dateKey(val(r,["Order create date","OrderDate"]));
+      if(f && (!d || d<f)) return false;
+      if(t && (!d || d>t)) return false;
+      return true;
+    });
+  }
+
+  function buildSummary(rows, startNames, endNames){
+    const groups=new Map();
+
+    rows.forEach(r=>{
+      const c=channel(r);
+      const s=status(r);
+      const order=String(val(r,["Order No","OrderNo"])||"").trim();
+      const start=val(r,startNames);
+      const end=val(r,endNames);
+      const key=c+"\u0000"+s;
+
+      if(!groups.has(key)) groups.set(key,{
+        channel:c,status:s,orders:new Set(),qty:0,
+        hours:[],missingStart:0,missingEnd:0
+      });
+
+      const g=groups.get(key);
+      if(order) g.orders.add(order);
+      g.qty += qty(r);
+
+      const h=hours(start,end);
+      if(h!=null && isFinite(h)) g.hours.push(h);
+      if(!dt(start)) g.missingStart++;
+      if(!dt(end)) g.missingEnd++;
+    });
+
+    return [...groups.values()].sort((a,b)=>
+      a.channel.localeCompare(b.channel) || a.status.localeCompare(b.status)
+    );
+  }
+
+  function renderSummary(hostId,title,note,rows,startNames,endNames,startLabel){
+    let host=document.getElementById(hostId);
+    if(!host){
+      const card=document.createElement("section");
+      card.className="card b2c-extra-summary";
+      card.id=hostId+"-card";
+      card.innerHTML=`
+        <div class="section-title">${title}</div>
+        <div class="summary-note">${note}</div>
+        <div id="${hostId}" class="table-wrap"></div>`;
+      const anchor=document.getElementById("b2c-allocation-pack-section");
+      if(anchor && anchor.parentNode) anchor.parentNode.insertBefore(card,anchor.nextSibling);
+      else document.getElementById("b2cTab")?.appendChild(card);
+      host=document.getElementById(hostId);
+    }
+    if(!host) return;
+
+    const data=buildSummary(rows,startNames,endNames);
+    if(!data.length){
+      host.innerHTML='<div class="note">No data available for the current B2C channel/date filters.</div>';
+      return;
+    }
+
+    const allOrders=new Set();
+    let totalQty=0;
+    data.forEach(g=>{g.orders.forEach(o=>allOrders.add(o)); totalQty+=g.qty;});
+
+    host.innerHTML=`
+      <table>
+        <thead><tr>
+          <th>Channel Name</th>
+          <th>Status</th>
+          <th>Unique Order Count</th>
+          <th>Order Qty</th>
+          <th>${startLabel} → Actual Ship Avg</th>
+          <th>Missing ${startLabel}</th>
+          <th>Missing Actual Ship</th>
+        </tr></thead>
+        <tbody>
+          ${data.map(g=>{
+            const avg=g.hours.length ? (g.hours.reduce((a,b)=>a+b,0)/g.hours.length).toFixed(1)+" h" : "—";
+            return `<tr>
+              <td><b>${esc(g.channel)}</b></td>
+              <td>${esc(g.status)}</td>
+              <td>${g.orders.size.toLocaleString("en-IN")}</td>
+              <td>${g.qty.toLocaleString("en-IN")}</td>
+              <td>${avg}</td>
+              <td class="${g.missingStart?'bad':''}">${g.missingStart.toLocaleString("en-IN")}</td>
+              <td class="${g.missingEnd?'bad':''}">${g.missingEnd.toLocaleString("en-IN")}</td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+        <tfoot><tr>
+          <th colspan="2">Total</th>
+          <th>${allOrders.size.toLocaleString("en-IN")}</th>
+          <th>${totalQty.toLocaleString("en-IN")}</th>
+          <th colspan="3"></th>
+        </tr></tfoot>
+      </table>`;
+  }
+
+  function renderB2cExtraSummaries(){
+    const rows=filteredByCurrentDates(b2cExtraRows());
+
+    renderSummary(
+      "b2cCreationActualSummary",
+      "Order Creation → Actual Ship Summary",
+      "Unique orders and Order Qty grouped by Channel Name and Status. Uses the current B2C channel and Order Creation date filters.",
+      rows,
+      ["Order create date","OrderDate"],
+      ["Actual_ShipDate","Actual_ShipDate "],
+      "Order Creation"
+    );
+
+    renderSummary(
+      "b2cAllocationActualSummary",
+      "Allocation → Actual Ship Summary",
+      "Uses Allocation Date when that field is present in the published B2C data. If Allocation Date is unavailable, the row is shown as missing rather than substituting Order Creation Date.",
+      rows,
+      ["Allocation Date","AllocationDate","Allocation date","allocation_date","Allocation_Date","Allocation Dt","AllocationDateTime"],
+      ["Actual_ShipDate","Actual_ShipDate "],
+      "Allocation"
+    );
+  }
+
+  // Extend the live-row mapper so future b2c-data.json versions can carry
+  // Allocation / Pack fields without changing the rest of the dashboard.
+  if(typeof loadB2cLiveData === "function"){
+    const originalLoad=loadB2cLiveData;
+    window.loadB2cLiveData=async function(){
+      const result=await originalLoad();
+      if(Array.isArray(window.B2C_LIVE_ROWS)){
+        window.B2C_LIVE_ROWS.forEach(r=>{
+          // Keep already-supported full field names untouched.
+          // Compact publishers may use any of these common keys.
+          if(!val(r,["Allocation Date","AllocationDate","allocation_date"])){
+            const src=r.__raw || {};
+            const a=src.a ?? src.al ?? src.alloc ?? src.allocation ?? "";
+            if(a) r["Allocation Date"]=a;
+          }
+          if(!val(r,["Pack Date","PackDate","pack_date"])){
+            const src=r.__raw || {};
+            const p=src.p ?? src.pk ?? src.pack ?? "";
+            if(p) r["Pack Date"]=p;
+          }
+        });
+      }
+      renderB2cExtraSummaries();
+      return result;
+    };
+  }
+
+  // Patch the current live mapper if it exists in the source by preserving
+  // optional compact allocation/pack keys before the original render uses them.
+  const originalRender=window.renderB2c;
+  if(typeof originalRender === "function"){
+    window.renderB2c=function(){
+      const result=originalRender.apply(this,arguments);
+      try{ renderB2cExtraSummaries(); }catch(e){ console.warn("B2C extra summaries:",e); }
+      return result;
+    };
+  }
+
+  ["b2cChannel","b2cStatus","b2cFrom","b2cTo"].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.addEventListener("change",()=>setTimeout(renderB2cExtraSummaries,0));
+  });
+
+  document.addEventListener("DOMContentLoaded",()=>{
+    setTimeout(renderB2cExtraSummaries,0);
+  });
+})();
+</script>
 <!doctype html>
 <html lang="en">
 <head>
