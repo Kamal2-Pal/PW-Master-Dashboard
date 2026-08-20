@@ -1,15 +1,9 @@
-update-b2c-data-allocation-pack.yml
-
-
 name: Update latest B2C data
 
 on:
   push:
     paths:
-      - "b2c/*.xlsx"
-      - "b2c/*.xlsb"
-      - "b2c/*.xlsm"
-      - "b2c/*.xls"
+      - "b2c/**"
       - "!b2c-data.json"
       - "!b2c-data-meta.json"
   workflow_dispatch:
@@ -55,12 +49,14 @@ jobs:
 
             while IFS= read -r f; do
               ts="$(git log -1 --format=%ct -- "$f" 2>/dev/null || echo 0)"
+
               if [ "$ts" -gt "$best_ts" ]; then
                 best_ts="$ts"
                 best="$f"
               fi
             done < <(
-              git ls-files 'b2c/*.xlsx' 'b2c/*.xlsb' 'b2c/*.xlsm' 'b2c/*.xls' |
+              git ls-files |
+              grep -Ei '^b2c/.*\.(xlsx|xlsb|xlsm|xls)$' |
               sort
             )
 
@@ -68,14 +64,14 @@ jobs:
           fi
 
           if [ -z "$SOURCE" ]; then
-            echo "No B2C Excel source found under b2c/."
+            echo "No B2C Excel source found under b2c/"
             exit 1
           fi
 
           echo "Selected B2C source: $SOURCE"
           echo "path=$SOURCE" >> "$GITHUB_OUTPUT"
 
-      - name: Build B2C JSON
+      - name: Build B2C data
         env:
           SOURCE_FILE: ${{ steps.source.outputs.path }}
         shell: bash
@@ -109,20 +105,16 @@ jobs:
               dtype=object,
           )
 
-          # Normalize only the column names; do not change the source data.
-          df.columns = [str(c).strip() for c in df.columns]
-
           required = [
               "Order No",
               "Order create date",
               "Ship By Date",
-              "Actual_ShipDate",
+              "Actual_ShipDate ",
               "Channel Name",
-              "Status",
-              "Order Qty",
           ]
 
           missing = [c for c in required if c not in df.columns]
+
           if missing:
               raise ValueError(
                   "Missing required B2C columns: " + ", ".join(missing)
@@ -131,31 +123,21 @@ jobs:
           def clean(value):
               if pd.isna(value):
                   return ""
+
               if isinstance(value, pd.Timestamp):
                   return value.strftime("%Y-%m-%d %H:%M:%S")
+
               return str(value).strip()
 
-          def qty(value):
-              if pd.isna(value):
-                  return 0
-              if isinstance(value, (int, float)):
-                  return float(value)
-              text = str(value).replace(",", "").strip()
-              try:
-                  return float(text)
-              except ValueError:
-                  return 0
-
           rows = []
-          for r in df[required].itertuples(index=False, name=None):
+
+          for row in df[required].itertuples(index=False, name=None):
               rows.append({
-                  "o": clean(r[0]),
-                  "cr": clean(r[1]),
-                  "sb": clean(r[2]),
-                  "as": clean(r[3]),
-                  "c": clean(r[4]),
-                  "st": clean(r[5]),
-                  "q": qty(r[6]),
+                  "o": clean(row[0]),
+                  "cr": clean(row[1]),
+                  "sb": clean(row[2]),
+                  "as": clean(row[3]),
+                  "c": clean(row[4]),
               })
 
           Path("b2c-data.json").write_text(
@@ -176,16 +158,6 @@ jobs:
               "channels": sorted(
                   str(x).strip()
                   for x in df["Channel Name"].dropna().unique()
-              ),
-              "statusValues": sorted(
-                  str(x).strip()
-                  for x in df["Status"].dropna().unique()
-              ),
-              "totalOrderQty": float(
-                  pd.to_numeric(
-                      df["Order Qty"].astype(str).str.replace(",", "", regex=False),
-                      errors="coerce"
-                  ).fillna(0).sum()
               ),
           }
 
