@@ -578,6 +578,14 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
     <button type="button" onclick="clearB2cFilters()">Clear B2C Filters</button>
   </div>
 
+  <section class="card" id="b2c-allocation-pack-section" style="margin:14px 0;">
+    <div class="section-title">Allocation → Pack Summary</div>
+    <div class="note">Channel Name and source Status-wise unique orders and Order Qty. The summary follows the current B2C channel/date filters.</div>
+    <div id="b2cAllocationPackSummary" class="table-wrap">
+      <div class="note">Loading Allocation → Pack summary…</div>
+    </div>
+  </section>
+
   <div class="grid">
     <section class="card"><div class="section-title">B2C SLA Status</div><div id="b2cStatusChart" class="hbars"></div></section>
     <section class="card"><div class="section-title">Channel-wise Orders</div><div id="b2cChannelChart" class="hbars"></div></section>
@@ -2351,7 +2359,9 @@ async function loadB2cLiveData(){
       "Order create date":r?.cr ?? "",
       "Ship By Date":r?.sb ?? "",
       "Actual_ShipDate":r?.as ?? null,
-      "Order No":r?.o ?? ""
+      "Order No":r?.o ?? "",
+      "Status":r?.st ?? "",
+      "Order Qty":r?.q ?? 0
     })).filter(r=>r["Order No"] || r["Order create date"] || r.finance_category);
 
     // Metadata tells the dashboard exactly which Excel file produced this
@@ -2513,8 +2523,70 @@ function b2cLineChart(rows, valueFn, pct=false){
   const max=Math.max(1,...keys.map(k=>by.get(k).n/by.get(k).d));
   return `<div class="mini-chart">${keys.map(k=>{const x=by.get(k);const val=x.d?x.n/x.d:0;const h=Math.max(4,(val/max)*100);return `<div class="mini-col"><div class="mini-value">${pct?(val*100).toFixed(1)+'%':Math.round(val).toLocaleString()}</div><div class="mini-bar" style="height:${h}%"></div><div class="mini-label">${esc(k.slice(5))}</div></div>`}).join('')}</div>`;
 }
+
+function renderB2CAllocationPackSummary(rows){
+  const host=document.getElementById("b2cAllocationPackSummary");
+  if(!host)return;
+
+  const groups=new Map();
+  (Array.isArray(rows)?rows:[]).forEach(r=>{
+    const channel=String(r.finance_category??"").trim()||"Unknown";
+    const status=String(r["Status"]??"").trim()||"Blank / Unknown";
+    const order=String(r["Order No"]??"").trim();
+    const qty=Number(String(r["Order Qty"]??0).replace(/,/g,""))||0;
+    const key=channel+"\u0000"+status;
+
+    if(!groups.has(key))groups.set(key,{channel,status,orders:new Set(),qty:0});
+    const g=groups.get(key);
+    if(order)g.orders.add(order);
+    g.qty+=qty;
+  });
+
+  const data=[...groups.values()].sort((a,b)=>
+    a.channel.localeCompare(b.channel)||a.status.localeCompare(b.status)
+  );
+
+  if(!data.length){
+    host.innerHTML='<div class="note">No Allocation → Pack data available for the current B2C filter.</div>';
+    return;
+  }
+
+  const allOrders=new Set();
+  let totalQty=0;
+  data.forEach(g=>{g.orders.forEach(o=>allOrders.add(o));totalQty+=g.qty;});
+
+  host.innerHTML=`
+    <table>
+      <thead>
+        <tr>
+          <th>Channel Name</th>
+          <th>Status</th>
+          <th>Unique Order Count</th>
+          <th>Order Qty</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${data.map(g=>`
+          <tr>
+            <td><b>${esc(g.channel)}</b></td>
+            <td>${esc(g.status)}</td>
+            <td>${g.orders.size.toLocaleString("en-IN")}</td>
+            <td>${g.qty.toLocaleString("en-IN")}</td>
+          </tr>`).join("")}
+      </tbody>
+      <tfoot>
+        <tr>
+          <th colspan="2">Total</th>
+          <th>${allOrders.size.toLocaleString("en-IN")}</th>
+          <th>${totalQty.toLocaleString("en-IN")}</th>
+        </tr>
+      </tfoot>
+    </table>`;
+}
+
 function renderB2c(){
   const rows=b2cFilteredRows();
+  renderB2CAllocationPackSummary(b2cFilteredRaw());
   const channels=[...B2C_SHIP_BY_CHANNELS,...B2C_24H_CHANNELS];
   const statusCounts={"Within SLA":0,"Breached":0,"Open > 24H":0,"Open Before 24H":0,"Missing Creation Date":0};
   let within=0, measured=0, breached=0, openOver=0, openBefore=0, missing=0;
