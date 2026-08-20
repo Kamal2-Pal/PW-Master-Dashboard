@@ -1,0 +1,17 @@
+{
+  "sourceFile": "B2C Dashboard-19.xlsb",
+  "sourcePath": "b2c/B2C Dashboard-19.xlsb",
+  "updatedAt": "2026-08-20T06:02:47.785651+00:00",
+  "lineItems": 72121,
+  "uniqueOrders": 57306,
+  "channels": [
+    "Amazon EasyShip",
+    "Cloudtail DF",
+    "FirstCry",
+    "Flipkart_SKD",
+    "Manual_Orders",
+    "Meesho",
+    "PW_Store",
+    "Shopify"
+  ]
+}
