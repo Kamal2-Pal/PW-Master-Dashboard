@@ -573,6 +573,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
   <div class="filters">
     <div class="field">Channel<select id="b2cChannel"><option value="">All B2C Channels</option></select></div>
     <div class="field">SLA Status<select id="b2cStatus"><option value="">All SLA Status</option></select></div>
+    <div class="field">Order Status<select id="b2cOrderStatus"><option value="">All Order Status</option></select></div>
     <div class="field">From Order Creation<input id="b2cFrom" type="date"></div>
     <div class="field">To Order Creation<input id="b2cTo" type="date"></div>
     <button type="button" onclick="clearB2cFilters()">Clear B2C Filters</button>
@@ -580,7 +581,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 
   <section class="card" id="b2c-allocation-pack-section" style="margin:14px 0;">
     <div class="section-title">Allocation → Pack Summary</div>
-    <div class="note">Channel Name and source Status-wise unique orders and Order Qty. The summary follows the current B2C channel/date filters.</div>
+    <div class="note">Channel-wise unique orders and Order Qty. The summary follows the current B2C channel, Order Status and date filters.</div>
     <div id="b2cAllocationPackSummary" class="table-wrap">
       <div class="note">Loading Allocation → Pack summary…</div>
     </div>
@@ -2424,7 +2425,7 @@ async function refreshB2cLive(){
   // again. Resetting filters makes the refreshed data immediately visible.
   B2C_LIVE_ROWS=[];
   B2C_DATA_LOADED=false;
-  ["b2cChannel","b2cStatus","b2cFrom","b2cTo"].forEach(id=>{
+  ["b2cChannel","b2cStatus","b2cOrderStatus","b2cFrom","b2cTo"].forEach(id=>{
     const el=document.getElementById(id);
     if(el) el.value="";
   });
@@ -2487,6 +2488,10 @@ function b2cAggregateChannel(rows, channel, mode){
 function b2cPct(n,d){return d ? (n/d*100).toFixed(1)+"%" : "0.0%";}
 function b2cHours(n){return n==null ? "—" : n.toFixed(1)+" h";}
 
+function b2cOrderStatus(row){
+  return String(row["Status"] ?? "").trim();
+}
+
 function b2cUnifiedStatus(row){
   const ch=b2cChannel(row);
   if(!ch)return null;
@@ -2499,6 +2504,7 @@ function b2cFilteredRows(){
   const t=document.getElementById("b2cTo")?.value || "";
   const chf=document.getElementById("b2cChannel")?.value || "";
   const sf=document.getElementById("b2cStatus")?.value || "";
+  const osf=document.getElementById("b2cOrderStatus")?.value || "";
   return b2cSourceRows().filter(r=>{
     const ch=b2cChannel(r);
     if(!ch)return false;
@@ -2508,6 +2514,8 @@ function b2cFilteredRows(){
     if(t && (!d || d>t))return false;
     const st=b2cUnifiedStatus(r)?.status || "";
     if(sf && st!==sf)return false;
+    const orderStatus=b2cOrderStatus(r);
+    if(osf && orderStatus!==osf)return false;
     return true;
   });
 }
@@ -2542,20 +2550,16 @@ function renderB2CAllocationPackSummary(rows){
   const groups=new Map();
   (Array.isArray(rows)?rows:[]).forEach(r=>{
     const channel=b2cChannel(r)||String(r.finance_category??"").trim()||"Unknown";
-    const status=String(r["Status"]??"").trim()||"Blank / Unknown";
     const order=String(r["Order No"]??"").trim();
     const qty=Number(String(r["Order Qty"]??0).replace(/,/g,""))||0;
-    const key=channel+"\u0000"+status;
 
-    if(!groups.has(key))groups.set(key,{channel,status,orders:new Set(),qty:0});
-    const g=groups.get(key);
+    if(!groups.has(channel))groups.set(channel,{channel,orders:new Set(),qty:0});
+    const g=groups.get(channel);
     if(order)g.orders.add(order);
     g.qty+=qty;
   });
 
-  const data=[...groups.values()].sort((a,b)=>
-    a.channel.localeCompare(b.channel)||a.status.localeCompare(b.status)
-  );
+  const data=[...groups.values()].sort((a,b)=>a.channel.localeCompare(b.channel));
 
   if(!data.length){
     host.innerHTML='<div class="note">No Allocation → Pack data available for the current B2C filter.</div>';
@@ -2571,7 +2575,6 @@ function renderB2CAllocationPackSummary(rows){
       <thead>
         <tr>
           <th>Channel Name</th>
-          <th>Status</th>
           <th>Unique Order Count</th>
           <th>Order Qty</th>
         </tr>
@@ -2580,14 +2583,13 @@ function renderB2CAllocationPackSummary(rows){
         ${data.map(g=>`
           <tr>
             <td><b>${esc(g.channel)}</b></td>
-            <td>${esc(g.status)}</td>
             <td>${g.orders.size.toLocaleString("en-IN")}</td>
             <td>${g.qty.toLocaleString("en-IN")}</td>
           </tr>`).join("")}
       </tbody>
       <tfoot>
         <tr>
-          <th colspan="2">Total</th>
+          <th>Total</th>
           <th>${allOrders.size.toLocaleString("en-IN")}</th>
           <th>${totalQty.toLocaleString("en-IN")}</th>
         </tr>
@@ -2634,7 +2636,7 @@ function renderB2cAllocationShipSummary(rows){
 
 function renderB2c(){
   const rows=b2cFilteredRows();
-  const summaryRows=b2cFilteredRaw();
+  const summaryRows=rows;
   renderB2CAllocationPackSummary(summaryRows);
   renderB2cAllocationShipSummary(summaryRows);
   const channels=[...B2C_SHIP_BY_CHANNELS,...B2C_24H_CHANNELS];
@@ -2684,12 +2686,20 @@ function populateB2cFilters(){
   sel.value=current;
   const st=document.getElementById("b2cStatus");
   if(st){const cur=st.value;st.innerHTML='<option value="">All SLA Status</option>'+Object.keys({"Within SLA":1,"Breached":1,"Open > 24H":1,"Open Before 24H":1,"Missing Creation Date":1}).map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');st.value=cur;}
+
+  const os=document.getElementById("b2cOrderStatus");
+  if(os){
+    const cur=os.value;
+    const statuses=[...new Set(b2cSourceRows().map(b2cOrderStatus).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    os.innerHTML='<option value="">All Order Status</option>'+statuses.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
+    os.value=cur;
+  }
 }
 function clearB2cFilters(){
-  ["b2cChannel","b2cStatus","b2cFrom","b2cTo"].forEach(id=>{const e=document.getElementById(id);if(e)e.value="";});
+  ["b2cChannel","b2cStatus","b2cOrderStatus","b2cFrom","b2cTo"].forEach(id=>{const e=document.getElementById(id);if(e)e.value="";});
   renderB2c();
 }
-["b2cChannel","b2cStatus","b2cFrom","b2cTo"].forEach(id=>{const e=document.getElementById(id);if(e)e.addEventListener("change",renderB2c);});
+["b2cChannel","b2cStatus","b2cOrderStatus","b2cFrom","b2cTo"].forEach(id=>{const e=document.getElementById(id);if(e)e.addEventListener("change",renderB2c);});
 
 /* Render B2C whenever the tab is opened. */
 document.querySelectorAll(".tab").forEach(btn=>{
