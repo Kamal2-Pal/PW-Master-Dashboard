@@ -601,7 +601,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 
   <section class="card">
     <div class="section-title">Allocation Date → Actual Ship Date Summary</div>
-    <div class="note">Same B2C 24-hour view, measured from <b>Allocation Date → Actual Ship Date</b>. This summary uses the same B2C channel and Order Creation Date filters. If Allocation Date is not present in the published B2C source, the table will show an availability message instead of mixing another dashboard's data.</div>
+    <div class="note">Same B2C 24-hour view, measured from <b>Allocation Date → Actual Ship Date</b>. In the Vinculum B2C export, Allocation Date is sourced from <b>AllocationTime</b>. This summary uses the same B2C channel and Order Creation Date filters.</div>
     <div class="table-wrap"><table><thead><tr><th>Channel</th><th>Total Orders</th><th>Within 24H</th><th>Breached</th><th>Open &gt; 24H</th><th>Open Before 24H</th><th>Missing Allocation Date</th><th>Avg Allocation → Ship</th></tr></thead><tbody id="b2cAllocationShipTbody"></tbody></table></div>
   </section>
 </section>
@@ -2303,7 +2303,7 @@ function b2cNorm(v){
   return String(v ?? "").trim().toLowerCase().replace(/[\s-]+/g,"_");
 }
 function b2cChannel(row){
-  const v=get(row,["finance_category","Finance Category"]);
+  const v=get(row,["Channel Name","channel_name","finance_category","Finance Category"]);
   const n=b2cNorm(v);
   const map={
     "meesho":"Meesho",
@@ -2364,15 +2364,16 @@ async function loadB2cLiveData(){
     if(!Array.isArray(compact)) throw new Error("b2c-data.json must contain an array");
 
     B2C_LIVE_ROWS=compact.map(r=>({
-      "finance_category":r?.c ?? "",
-      "Order create date":r?.cr ?? "",
-      "Ship By Date":r?.sb ?? "",
-      "Actual_ShipDate":r?.as ?? null,
-      "Allocation Date":r?.al ?? r?.allocation_date ?? r?.AllocationDate ?? "",
-      "Order No":r?.o ?? "",
-      "Status":r?.st ?? "",
-      "Order Qty":r?.q ?? 0
-    })).filter(r=>r["Order No"] || r["Order create date"] || r.finance_category);
+      "Channel Name":r?.c ?? r?.channel ?? r?.channel_name ?? r?.["Channel Name"] ?? "",
+      "finance_category":r?.fc ?? r?.finance_category ?? r?.c ?? "",
+      "Order create date":r?.cr ?? r?.order_create_date ?? r?.["Order create date"] ?? "",
+      "Ship By Date":r?.sb ?? r?.ship_by ?? r?.["Ship By Date"] ?? "",
+      "Actual_ShipDate":r?.as ?? r?.actual_ship_date ?? r?.["Actual_ShipDate"] ?? null,
+      "Allocation Date":r?.al ?? r?.at ?? r?.allocation_date ?? r?.AllocationDate ?? r?.AllocationTime ?? "",
+      "Order No":r?.o ?? r?.order_no ?? r?.["Order No"] ?? "",
+      "Status":r?.st ?? r?.status ?? r?.Status ?? "",
+      "Order Qty":r?.q ?? r?.qty ?? r?.order_qty ?? r?.["Order Qty"] ?? 0
+    })).filter(r=>r["Order No"] || r["Order create date"] || r["Channel Name"] || r.finance_category);
 
     // Metadata tells the dashboard exactly which Excel file produced this
     // live JSON, so the user can verify that the latest file was selected.
@@ -2540,7 +2541,7 @@ function renderB2CAllocationPackSummary(rows){
 
   const groups=new Map();
   (Array.isArray(rows)?rows:[]).forEach(r=>{
-    const channel=String(r.finance_category??"").trim()||"Unknown";
+    const channel=b2cChannel(r)||String(r.finance_category??"").trim()||"Unknown";
     const status=String(r["Status"]??"").trim()||"Blank / Unknown";
     const order=String(r["Order No"]??"").trim();
     const qty=Number(String(r["Order Qty"]??0).replace(/,/g,""))||0;
@@ -2623,7 +2624,9 @@ function renderB2cAllocationShipSummary(rows){
     body.innerHTML='<tr><td colspan="8" class="note">Allocation Date is not available in the published B2C data source yet. Once the source includes Allocation Date, this summary will populate automatically.</td></tr>';
     return;
   }
-  body.innerHTML=B2C_24H_CHANNELS.map(ch=>{
+  const discovered=[...new Set(rows.map(b2cChannel).filter(Boolean))];
+  const channels=[...B2C_24H_CHANNELS,...discovered.filter(ch=>!B2C_24H_CHANNELS.includes(ch))];
+  body.innerHTML=channels.map(ch=>{
     const x=b2cAggregateFromDateChannel(rows,ch,b2cAllocationDate);
     return `<tr><td><b>${esc(ch)}</b></td><td>${x.total.toLocaleString()}</td><td class="good">${x.within.toLocaleString()} <small>(${b2cPct(x.within,x.total)})</small></td><td class="bad">${x.breached.toLocaleString()} <small>(${b2cPct(x.breached,x.total)})</small></td><td>${x.openOver.toLocaleString()}</td><td>${x.openBefore.toLocaleString()}</td><td class="${x.missing?'bad':''}">${x.missing.toLocaleString()}</td><td>${b2cHours(x.avgHours)}</td></tr>`;
   }).join('');
