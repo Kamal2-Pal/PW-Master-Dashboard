@@ -3,7 +3,7 @@ name: Update latest B2C data
 on:
   push:
     paths:
-      - 'b2c/**'
+      - "b2c/**"
   workflow_dispatch:
 
 permissions:
@@ -22,7 +22,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Install Excel readers
         run: |
@@ -35,34 +35,21 @@ jobs:
         run: |
           set -euo pipefail
 
-          SOURCE="$(
-            git diff-tree --no-commit-id --name-only --diff-filter=ACMR -r "$GITHUB_SHA" |
-            grep -Ei '^b2c/.*\.(xlsx|xlsb|xlsm|xls)$' |
-            head -n 1 || true
+          SOURCE=""
+
+          while IFS= read -r file; do
+            SOURCE="$file"
+            break
+          done < <(
+            find b2c -maxdepth 1 -type f \
+              \( -iname "*.xlsx" -o -iname "*.xlsb" -o -iname "*.xlsm" -o -iname "*.xls" \) \
+              -printf "%T@ %p\n" |
+            sort -nr |
+            cut -d' ' -f2-
           )
 
           if [ -z "$SOURCE" ]; then
-            best=""
-            best_ts=0
-
-            while IFS= read -r f; do
-              ts="$(git log -1 --format=%ct -- "$f" 2>/dev/null || echo 0)"
-
-              if [ "$ts" -gt "$best_ts" ]; then
-                best_ts="$ts"
-                best="$f"
-              fi
-            done < <(
-              git ls-files |
-              grep -Ei '^b2c/.*\.(xlsx|xlsb|xlsm|xls)$' ||
-              true
-            )
-
-            SOURCE="$best"
-          fi
-
-          if [ -z "$SOURCE" ]; then
-            echo "No B2C Excel source found under b2c/"
+            echo "ERROR: No B2C Excel file found inside b2c/"
             exit 1
           fi
 
@@ -94,7 +81,8 @@ jobs:
           else:
               engine = "openpyxl"
 
-          print(f"Reading B2C source: {source} using {engine}")
+          print(f"Reading B2C source: {source}")
+          print(f"Using engine: {engine}")
 
           df = pd.read_excel(
               source,
@@ -103,12 +91,15 @@ jobs:
               dtype=object
           )
 
+          print("Columns found:")
+          print(list(df.columns))
+
           required = [
               "Order No",
               "Order create date",
               "Ship By Date",
               "Actual_ShipDate ",
-              "Channel Name"
+              "Channel Name",
           ]
 
           missing = [c for c in required if c not in df.columns]
@@ -129,13 +120,13 @@ jobs:
 
           rows = []
 
-          for r in df[required].itertuples(index=False, name=None):
+          for row in df[required].itertuples(index=False, name=None):
               rows.append({
-                  "o": clean(r[0]),
-                  "cr": clean(r[1]),
-                  "sb": clean(r[2]),
-                  "as": clean(r[3]),
-                  "c": clean(r[4])
+                  "o": clean(row[0]),
+                  "cr": clean(row[1]),
+                  "sb": clean(row[2]),
+                  "as": clean(row[3]),
+                  "c": clean(row[4]),
               })
 
           Path("b2c-data.json").write_text(
@@ -164,6 +155,7 @@ jobs:
               encoding="utf-8"
           )
 
+          print("B2C data generated successfully.")
           print(json.dumps(meta, indent=2))
           PY
 
