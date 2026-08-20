@@ -151,17 +151,25 @@ jobs:
                   return 0
 
           rows = []
-          export_cols = required + ([allocation_col] if allocation_col else [])
+          export_cols = required + (["finance_category"] if "finance_category" in df.columns else []) + ([allocation_col] if allocation_col else [])
           for r in df[export_cols].itertuples(index=False, name=None):
+              # required indexes stay fixed; optional fields are appended.
+              finance_value = ""
+              if "finance_category" in df.columns:
+                  finance_value = r[len(required)]
+              allocation_value = ""
+              if allocation_col:
+                  allocation_value = r[len(required) + (1 if "finance_category" in df.columns else 0)]
               rows.append({
                   "o": clean(r[0]),
                   "cr": clean(r[1]),
                   "sb": clean(r[2]),
                   "as": clean(r[3]),
-                  "c": clean(r[4]),
-                  "st": clean(r[5]),
-                  "q": qty(r[6]),
-                  "al": clean(r[7]) if allocation_col else "",
+                  "c": clean(r[4]),             # Channel Name
+                  "st": clean(r[5]),             # Status
+                  "q": qty(r[6]),                # Order Qty
+                  "fc": clean(finance_value),
+                  "al": clean(allocation_value), # AllocationTime in current Vinculum export
               })
 
           Path("b2c-data.json").write_text(
@@ -194,6 +202,7 @@ jobs:
                   ).fillna(0).sum()
               ),
               "allocationDateColumn": allocation_col or "",
+              "channelColumn": "Channel Name",
           }
 
           Path("b2c-data-meta.json").write_text(
