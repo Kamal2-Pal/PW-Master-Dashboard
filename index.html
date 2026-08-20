@@ -594,9 +594,15 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
   </div>
 
   <section class="card">
-    <div class="section-title">B2C 24H TAT — Channel Summary</div>
-    <div class="note">All B2C channels follow the same TAT: <b>Order Creation Date → Actual Ship Date ≤ 24 hours</b>. Missing Actual Ship remains Open and is evaluated against Creation Date + 24 hours.</div>
+    <div class="section-title">Order Creation Date → Actual Ship Date Summary</div>
+    <div class="note">B2C TAT is measured from <b>Order Creation Date → Actual Ship Date</b> with a 24-hour target. Missing Actual Ship remains Open and is evaluated against Creation Date + 24 hours.</div>
     <div class="table-wrap"><table><thead><tr><th>Channel</th><th>Total Orders</th><th>Within 24H</th><th>Breached</th><th>Open &gt; 24H</th><th>Open Before 24H</th><th>Missing Creation Date</th><th>Avg Creation → Ship</th></tr></thead><tbody id="b2c24Tbody"></tbody></table></div>
+  </section>
+
+  <section class="card">
+    <div class="section-title">Allocation Date → Actual Ship Date Summary</div>
+    <div class="note">Same B2C 24-hour view, measured from <b>Allocation Date → Actual Ship Date</b>. This summary uses the same B2C channel and Order Creation Date filters. If Allocation Date is not present in the published B2C source, the table will show an availability message instead of mixing another dashboard's data.</div>
+    <div class="table-wrap"><table><thead><tr><th>Channel</th><th>Total Orders</th><th>Within 24H</th><th>Breached</th><th>Open &gt; 24H</th><th>Open Before 24H</th><th>Missing Allocation Date</th><th>Avg Allocation → Ship</th></tr></thead><tbody id="b2cAllocationShipTbody"></tbody></table></div>
   </section>
 </section>
 
@@ -2322,6 +2328,9 @@ function b2cShipBy(row){
 function b2cActualShip(row){
   return parseSlaDate(get(row,["Actual_ShipDate","Actual_ShipDate "]));
 }
+function b2cAllocationDate(row){
+  return parseSlaDate(get(row,["Allocation Date","AllocationDate","AllocationTime","Allocation Time"]));
+}
 function b2cDateKey(v){
   const d=parseSlaDate(v);
   if(!d)return "";
@@ -2359,6 +2368,7 @@ async function loadB2cLiveData(){
       "Order create date":r?.cr ?? "",
       "Ship By Date":r?.sb ?? "",
       "Actual_ShipDate":r?.as ?? null,
+      "Allocation Date":r?.al ?? r?.allocation_date ?? r?.AllocationDate ?? "",
       "Order No":r?.o ?? "",
       "Status":r?.st ?? "",
       "Order Qty":r?.q ?? 0
@@ -2584,9 +2594,46 @@ function renderB2CAllocationPackSummary(rows){
     </table>`;
 }
 
+function b2cAggregateFromDateChannel(rows, channel, dateFn){
+  const data=rows.filter(r=>b2cChannel(r)===channel);
+  const out={total:data.length,within:0,breached:0,openOver:0,openBefore:0,missing:0,avgHours:null};
+  const measured=[];
+  const now=new Date();
+  data.forEach(r=>{
+    const start=dateFn(r);
+    const actual=b2cActualShip(r);
+    if(!start){out.missing++;return;}
+    if(actual){
+      const hours=(actual-start)/3600000;
+      if(hours<=24) out.within++; else out.breached++;
+      measured.push(hours);
+    }else{
+      const hours=(now-start)/3600000;
+      if(hours>24) out.openOver++; else out.openBefore++;
+    }
+  });
+  if(measured.length) out.avgHours=measured.reduce((a,b)=>a+b,0)/measured.length;
+  return out;
+}
+function renderB2cAllocationShipSummary(rows){
+  const body=document.getElementById("b2cAllocationShipTbody");
+  if(!body)return;
+  const hasAllocation=rows.some(r=>b2cAllocationDate(r));
+  if(!hasAllocation){
+    body.innerHTML='<tr><td colspan="8" class="note">Allocation Date is not available in the published B2C data source yet. Once the source includes Allocation Date, this summary will populate automatically.</td></tr>';
+    return;
+  }
+  body.innerHTML=B2C_24H_CHANNELS.map(ch=>{
+    const x=b2cAggregateFromDateChannel(rows,ch,b2cAllocationDate);
+    return `<tr><td><b>${esc(ch)}</b></td><td>${x.total.toLocaleString()}</td><td class="good">${x.within.toLocaleString()} <small>(${b2cPct(x.within,x.total)})</small></td><td class="bad">${x.breached.toLocaleString()} <small>(${b2cPct(x.breached,x.total)})</small></td><td>${x.openOver.toLocaleString()}</td><td>${x.openBefore.toLocaleString()}</td><td class="${x.missing?'bad':''}">${x.missing.toLocaleString()}</td><td>${b2cHours(x.avgHours)}</td></tr>`;
+  }).join('');
+}
+
 function renderB2c(){
   const rows=b2cFilteredRows();
-  renderB2CAllocationPackSummary(b2cFilteredRaw());
+  const summaryRows=b2cFilteredRaw();
+  renderB2CAllocationPackSummary(summaryRows);
+  renderB2cAllocationShipSummary(summaryRows);
   const channels=[...B2C_SHIP_BY_CHANNELS,...B2C_24H_CHANNELS];
   const statusCounts={"Within SLA":0,"Breached":0,"Open > 24H":0,"Open Before 24H":0,"Missing Creation Date":0};
   let within=0, measured=0, breached=0, openOver=0, openBefore=0, missing=0;
