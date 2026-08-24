@@ -237,6 +237,9 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
      <label class="upload-label primary" for="file">＋ Upload Vinculum Excel</label>
      <button onclick="resetAll()">↻ Reset</button>
      <div class="counterapi" ns="kamal2-pal.github.io/PW-Master-Dashboard" action="view" key="master-dashboard" label="views" noIcon="true" noLink="true" style="min-height:32px;display:flex;align-items:center;"></div>
+     <div id="liveUsersCounter" title="Currently connected dashboard sessions" style="min-height:32px;display:flex;align-items:center;padding:0 11px;border:1px solid #38516a;border-radius:8px;background:#172331;color:#8ff0b0;font-size:13px;font-weight:800;white-space:nowrap;">
+       🟢 Live Now: <span id="liveUsersCount" style="margin-left:5px;">0</span>
+     </div>
    </div>
  </div>
  <input id="file" type="file" accept=".xlsx,.xlsb,.xlsm,.xls,.csv">
@@ -2874,5 +2877,66 @@ try {
 }
 
 </script>
+
+<!-- Supabase Realtime Presence: current dashboard sessions -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function () {
+  const SUPABASE_URL = "https://nfacejugcsbmljqqswpy.supabase.co";
+  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_nH2Bmsb9gm29Txb9-9pynw_-vzcFSHX";
+
+  const countEl = document.getElementById("liveUsersCount");
+  if (!countEl || !window.supabase) return;
+
+  const client = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_PUBLISHABLE_KEY
+  );
+
+  // One unique session per open dashboard tab.
+  let sessionId = sessionStorage.getItem("pw_dashboard_live_session");
+  if (!sessionId) {
+    sessionId =
+      "session-" +
+      Date.now() +
+      "-" +
+      Math.random().toString(36).slice(2);
+    sessionStorage.setItem("pw_dashboard_live_session", sessionId);
+  }
+
+  const channel = client.channel("pw-master-dashboard-live-users", {
+    config: {
+      presence: {
+        key: sessionId
+      }
+    }
+  });
+
+  function renderLiveCount() {
+    const state = channel.presenceState();
+    const count = Object.keys(state).length;
+    countEl.textContent = String(count);
+  }
+
+  channel
+    .on("presence", { event: "sync" }, renderLiveCount)
+    .on("presence", { event: "join" }, renderLiveCount)
+    .on("presence", { event: "leave" }, renderLiveCount)
+    .subscribe(async (status) => {
+      if (status === "SUBSCRIBED") {
+        await channel.track({
+          page: "PW Master Dashboard",
+          connected_at: new Date().toISOString()
+        });
+        renderLiveCount();
+      }
+    });
+
+  // If the tab becomes hidden, keep the connection alive because it is
+  // still an open dashboard session. The count will drop automatically
+  // when the tab/browser disconnects.
+})();
+</script>
+
 </body>
 </html>
