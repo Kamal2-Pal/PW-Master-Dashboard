@@ -232,6 +232,16 @@ body.auth-locked > header, body.auth-locked > .tabs, body.auth-locked > main { d
 </style>
 </head>
 <body class="auth-locked">
+<div id="companyAuthOverlay" class="auth-overlay" style="display:flex;">
+  <div class="auth-card">
+    <div class="auth-logo">V</div>
+    <h2>PW- Master Dashboard</h2>
+    <p>Company login required.<br>Only authorised <b>@xylemlearning.com</b> accounts can access this dashboard.</p>
+    <button id="companyGoogleLogin" class="auth-btn" type="button">Continue with Company Google</button>
+    <div id="authMessage" class="auth-msg">Please sign in with your company account.</div>
+  </div>
+</div>
+
 <header class="header">
  <div class="title"><div class="logo">V</div><div><h1>PW- Master Dashboard</h1><div class="sub" id="sourceText">Loading latest central Vinculum report…</div></div></div>
  <div class="header-tools">
