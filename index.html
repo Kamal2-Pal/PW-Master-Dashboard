@@ -872,20 +872,42 @@ function resetAll(){
 }
 
 function normalizeRows(rows){
+  // Canonicalize the Vinculum Order Report headers used by the previous
+  // dashboard version while preserving all source columns.
   return (rows||[]).map(r=>{
     const x={};
     Object.keys(r||{}).forEach(k=>{
       let v=r[k];
-      if(v instanceof Date) v=v.toISOString().slice(0,10);
+      if(v instanceof Date) v=v.toISOString().replace('T',' ').replace('Z','');
       x[String(k).trim()]=v;
     });
+    const alias=(canonical,candidates)=>{
+      if(x[canonical]===undefined || x[canonical]===null || x[canonical]===''){
+        for(const k of candidates){
+          if(x[k]!==undefined && x[k]!==null && x[k]!==''){x[canonical]=x[k];break;}
+        }
+      }
+    };
+    alias("Extern Order No",["ExternOrderNo","External Order No","External OrderNo"]);
+    alias("Customer Name",["Cutomer Name","CustomerName"]);
+    alias("Order create date",["OrderDate","Order Create Date","Order create date "]);
+    alias("Picklist No.",["PickListNo","Picklist No","PicklistNo"]);
+    alias("Bin",["FROMBIN","From Bin","FROM BIN"]);
+    alias("Pick User",["PickUser","Pick User Name"]);
+    alias("WH remarks",["WH Remarks","WH remarks "]);
+    alias("Manifest Create Date",["Manifest Create Date ","ManifestCreateDate"]);
+    alias("Actual_ShipDate",["Actual_ShipDate ","Actual Ship Date","ActualShipDate"]);
+    alias("FulfillmentLocationName",["Fulfillment Location Name"]);
+    alias("finance_category",["Finance Category","finance category"]);
     return x;
   });
 }
 
 function hasOrderColumns(rows){
   const keys=new Set(Object.keys((rows&&rows[0])||{}).map(k=>String(k).trim()));
-  return ["Order No","OrderDate","Status","Order Qty","Picked Qty","Shipped Qty","Open Qty"].every(k=>keys.has(k));
+  const required=["Order No","Status","Order Qty","Picked Qty","Shipped Qty","Open Qty"];
+  const hasOrderDate=keys.has("OrderDate") || keys.has("Order create date") || keys.has("Order Create Date");
+  return required.every(k=>keys.has(k)) && hasOrderDate;
 }
 function hasPickerColumns(rows){
   const keys=new Set(Object.keys((rows&&rows[0])||{}).map(k=>String(k).trim()));
@@ -955,10 +977,8 @@ function loadCentralReportLocally(){
 }
 
 async function loadCentralExcel(){
-  // Order Fulfillment / 48H Ship SLA / 48H Manifest SLA use ONLY the
-  // Vinculum Order report. Picker data is kept completely separate.
-  if(loadCentralReportLocally()) return true;
-
+  // Previous-version behaviour: data.xlsx is the source of truth on
+  // initial load/reset, so stale browser-local uploads cannot mask it.
   try{
     const response = await fetch("data.xlsx?ts="+Date.now()+"-"+Math.random().toString(36).slice(2), {
       cache:"no-store",
