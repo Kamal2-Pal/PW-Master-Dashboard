@@ -217,7 +217,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 .good{color:#187a43;font-weight:800}.bad{color:#c52f2f;font-weight:800}
 .mini-chart{height:220px;display:flex;align-items:flex-end;gap:6px;overflow:auto;padding:12px 4px 0}.mini-col{min-width:52px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:5px}.mini-bar{width:28px;min-height:4px;background:#1f6fb2;border-radius:4px 4px 0 0}.mini-value{font-size:10px;color:#4d5b68;white-space:nowrap}.mini-label{font-size:9px;color:#6c7783;white-space:nowrap}.empty{padding:18px;color:#6b7785}
 
-.data-warning{background:#fff3cd;border:1px solid #ffe08a;color:#664d03;border-radius:9px;padding:9px 12px;font-size:12px;font-weight:700;margin-bottom:12px;display:none}</style>
+</style>
 </head>
 <body>
 <header class="header">
@@ -885,28 +885,11 @@ function normalizeRows(rows){
 
 function hasOrderColumns(rows){
   const keys=new Set(Object.keys((rows&&rows[0])||{}).map(k=>String(k).trim()));
-  // These are the minimum fields that identify the Vinculum Order report.
-  return ["Order No","OrderDate","Order Qty","Picked Qty","Shipped Qty","Open Qty","Status"]
-    .every(k=>keys.has(k));
+  return ["Order No","OrderDate","Status","Order Qty","Picked Qty","Shipped Qty","Open Qty"].every(k=>keys.has(k));
 }
 function hasPickerColumns(rows){
   const keys=new Set(Object.keys((rows&&rows[0])||{}).map(k=>String(k).trim()));
-  return ["Pick User","Bin","Qty","Picklist No.","Order No","Source WH"].every(k=>keys.has(k));
-}
-function workbookRowsByType(wb, type){
-  for(const name of wb.SheetNames){
-    const ws=wb.Sheets[name];
-    const rows=normalizeRows(XLSX.utils.sheet_to_json(ws,{defval:""}));
-    if((type==="order" && hasOrderColumns(rows)) || (type==="picker" && hasPickerColumns(rows))){
-      return rows;
-    }
-  }
-  return [];
-}
-
-function hasPickerColumns(rows){
-  const keys=new Set(Object.keys((rows&&rows[0])||{}).map(k=>String(k).trim()));
-  return ["Pick User","Bin","Qty","Picklist No.","Order No","Source WH"].every(k=>keys.has(k));
+  return ["Order No","Pick User","Bin","Qty","Picklist No.","Source WH"].every(k=>keys.has(k));
 }
 
 function syncPickerFromMainUpload(rows,fileName){
@@ -953,10 +936,7 @@ function loadCentralReportLocally(){
     const saved=localStorage.getItem(CENTRAL_LOCAL_STORAGE_KEY);
     if(!saved) return false;
     const obj=JSON.parse(saved);
-    if(!obj || !Array.isArray(obj.rows) || !obj.rows.length || !hasOrderColumns(obj.rows)){
-      localStorage.removeItem(CENTRAL_LOCAL_STORAGE_KEY);
-      return false;
-    }
+    if(!obj || !Array.isArray(obj.rows) || !obj.rows.length || !hasOrderColumns(obj.rows)) return false;
     raw=obj.rows;
     populateGlobalMonthFilter();
     populateFilters(); clearFilters();
@@ -965,19 +945,18 @@ function loadCentralReportLocally(){
     const savedAt=new Date(obj.savedAt||"");
     const when=isNaN(savedAt.getTime()) ? "" : ` • saved ${savedAt.toLocaleString()}`;
     document.getElementById("sourceText").textContent =
-      `Latest Order report • ${raw.length.toLocaleString()} report rows • ${obj.name||"uploaded order file"}${when}`;
-    loadLatestPickerFromGithub();
+      `Latest uploaded Vinculum report • ${raw.length.toLocaleString()} report rows • ${obj.name||"local file"}${when}`;
+    syncPickerFromMainUpload(raw,obj.name||"uploaded file");
     return true;
   }catch(err){
     console.warn("Could not load saved central report:", err);
-    try{ localStorage.removeItem(CENTRAL_LOCAL_STORAGE_KEY); }catch(e){}
     return false;
   }
 }
 
 async function loadCentralExcel(){
-  // ONLY the Order report is allowed to populate Order Fulfillment / Ship SLA /
-  // Manifest SLA. Picker data is loaded independently from picker-data.csv.
+  // Order Fulfillment / 48H Ship SLA / 48H Manifest SLA use ONLY the
+  // Vinculum Order report. Picker data is kept completely separate.
   if(loadCentralReportLocally()) return true;
 
   try{
@@ -989,12 +968,17 @@ async function loadCentralExcel(){
 
     const buffer = await response.arrayBuffer();
     const wb = XLSX.read(buffer,{type:"array",cellDates:true});
-    raw = workbookRowsByType(wb,"order");
 
-    if(!raw.length){
-      throw new Error("data.xlsx does not contain a Vinculum Order report. Picker Report cannot be used as Order data.");
+    let orderRows=[];
+    for(const sheetName of wb.SheetNames){
+      const rows=normalizeRows(XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{defval:""}));
+      if(hasOrderColumns(rows)){ orderRows=rows; break; }
+    }
+    if(!orderRows.length){
+      throw new Error("data.xlsx does not contain the Vinculum Order report");
     }
 
+    raw=orderRows;
     populateGlobalMonthFilter();
     populateFilters();
     clearFilters();
@@ -1005,7 +989,7 @@ async function loadCentralExcel(){
 
     const loadedAt = new Date();
     let metaText = `Loaded ${loadedAt.toLocaleString()}`;
-    try {
+    try{
       const metaRes = await fetch("data-meta.json?ts="+Date.now()+"-"+Math.random().toString(36).slice(2), {
         cache:"no-store",
         headers:{"Cache-Control":"no-cache"}
@@ -1017,11 +1001,10 @@ async function loadCentralExcel(){
       }
     }catch(e){}
 
-    // Do not trust data-meta.json's sourceFile label for dataset identity.
-    // Identity is determined from the actual column structure above.
     document.getElementById("sourceText").textContent =
       `LIVE Vinculum Order report • ${raw.length.toLocaleString()} report rows • data.xlsx • ${metaText}`;
 
+    // Picker stays independent.
     loadLatestPickerFromGithub();
     return true;
   }catch(err){
@@ -1032,7 +1015,6 @@ async function loadCentralExcel(){
     populateFilters();
     render();
     console.warn("Live Order report unavailable:",err);
-    // Still try the independent Picker source.
     loadLatestPickerFromGithub();
     return false;
   }
@@ -1064,18 +1046,38 @@ async function refreshOrderLive(){
 document.getElementById("file").addEventListener("change",async e=>{
   const file=e.target.files[0]; if(!file)return;
   try{
-    const data=parseWorkbookBuffer(await file.arrayBuffer());
-    if(!data.length) throw new Error("Excel file is empty");
-    raw=data;
-    populateGlobalMonthFilter();
-    // This is now the NEW CURRENT FILE. Persist it for refresh/reopen.
-    saveCentralReportLocally(raw,file.name);
-    populateFilters(); clearFilters();
-    initSlaFilters(); applySlaFilters();
-    initManifestFilters(); applyManifestFilters();
-    syncPickerFromMainUpload(raw,file.name);
-    document.getElementById("sourceText").textContent=
-      `Live upload • ${raw.length.toLocaleString()} report rows • ${file.name} • uploaded ${new Date().toLocaleString()}`;
+    const wb=XLSX.read(await file.arrayBuffer(),{type:"array",cellDates:true});
+    let orderData=[];
+    let pickerData=[];
+
+    for(const sheetName of wb.SheetNames){
+      const rows=normalizeRows(XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{defval:""}));
+      if(!orderData.length && hasOrderColumns(rows)) orderData=rows;
+      if(!pickerData.length && hasPickerColumns(rows)) pickerData=rows;
+    }
+
+    if(orderData.length){
+      raw=orderData;
+      saveCentralReportLocally(raw,file.name);
+      populateGlobalMonthFilter();
+      populateFilters(); clearFilters();
+      initSlaFilters(); applySlaFilters();
+      initManifestFilters(); applyManifestFilters();
+      document.getElementById("sourceText").textContent=
+        `LIVE Order upload • ${raw.length.toLocaleString()} report rows • ${file.name} • uploaded ${new Date().toLocaleString()}`;
+      loadLatestPickerFromGithub();
+      alert("Order report loaded successfully. Picker data remains separate.");
+    }else if(pickerData.length){
+      // Picker upload must NEVER replace raw/current Order data.
+      loadPickerObjects(pickerData,file.name);
+      document.getElementById("pickerDateFilter").value="";
+      renderPicker();
+      const pickerTabBtn=document.querySelector('.tab[data-tab="pickerTab"]');
+      if(pickerTabBtn) pickerTabBtn.click();
+      alert("Picker Report loaded successfully. Order/SLA data was not changed.");
+    }else{
+      throw new Error("This file is neither a valid Vinculum Order report nor a valid Picker Report.");
+    }
   }catch(err){
     alert("File read nahi ho payi: "+err.message);
   }finally{
