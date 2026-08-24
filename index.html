@@ -236,7 +236,7 @@ body.auth-locked > header, body.auth-locked > .tabs, body.auth-locked > main { d
   <div class="auth-card">
     <div class="auth-logo">V</div>
     <h2>PW- Master Dashboard</h2>
-    <p>Company login required.<br>Only authorised <b>@xylemlearning.com</b> accounts can access this dashboard.</p>
+    <p>Company login required.<br>Only authorised <b>email.endsWith("@pw.live")</b> accounts can access this dashboard.</p>
     <button id="companyGoogleLogin" class="auth-btn" type="button">Continue with Company Google</button>
     <div id="authMessage" class="auth-msg">Please sign in with your company account.</div>
   </div>
@@ -2999,7 +2999,7 @@ try {
 (function(){
   const SUPABASE_URL = "https://nfacejugcsbmljqqswpy.supabase.co";
   const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_nH2Bmsb9gm29Txb9-9pynw_-vzcFSHX";
-  const COMPANY_EMAIL_DOMAIN = "xylemlearning.com";
+  const COMPANY_EMAIL_DOMAIN = "email.endsWith("@pw.live")";
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
   const overlay=document.getElementById('companyAuthOverlay');
   const loginBtn=document.getElementById('companyGoogleLogin');
