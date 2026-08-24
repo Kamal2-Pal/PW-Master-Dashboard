@@ -232,6 +232,22 @@ body.auth-locked > header, body.auth-locked > .tabs, body.auth-locked > main { d
 @media(max-width:900px){.ops-summary{grid-template-columns:1fr}.ops-search-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:600px){.ops-search-grid{grid-template-columns:1fr}}
 
+
+.search-summary-card{cursor:default}
+.search-summary-controls{display:flex;gap:7px;margin:8px 0 9px;align-items:center}
+.summary-search-input{flex:1;min-width:0;height:34px;border:1px solid #cfd8e3;border-radius:7px;padding:0 9px;font-size:12px;outline:none;background:#fff;color:#17212b}
+.summary-search-input:focus{border-color:#5b8def;box-shadow:0 0 0 2px #5b8def22}
+.summary-search-btn,.summary-search-clear{height:34px;border-radius:7px;padding:0 10px;font-size:12px;font-weight:700;cursor:pointer}
+.summary-search-btn{border:1px solid #111;background:#111;color:#fff}
+.summary-search-clear{border:1px solid #cfd8e3;background:#fff;color:#25313d}
+.search-summary-result{display:none;margin-top:8px;padding:8px;border-radius:7px;background:#f6f8fb;font-size:12px;line-height:1.45}
+.search-summary-result.show{display:block}
+.search-hit-row{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #e4e9ef;padding:4px 0}
+.search-hit-row:last-child{border-bottom:0}
+.search-hit-label{font-weight:700;color:#5a6876}
+.search-hit-value{color:#17212b;text-align:right;word-break:break-word}
+.search-empty{color:#c62828;font-weight:700}
+
 </style>
 </head>
 <body class="auth-locked">
@@ -302,7 +318,18 @@ body.auth-locked > header, body.auth-locked > .tabs, body.auth-locked > main { d
 
 
  <section class="ops-summary" id="opsSummary">
-   <div class="ops-card"><h3>🔎 Search Summary</h3><div class="big" id="searchSummaryCount">0</div><div class="muted" id="searchSummaryText">Type an Order No. or External Order No. in the header.</div></div>
+   <div class="ops-card"><div class="summary-card search-summary-card" id="searchSummaryCard">
+  <div class="summary-title">🔎 Search Summary</div>
+  <div class="search-summary-controls">
+    <input id="searchSummaryInput" class="summary-search-input" type="text"
+           placeholder="Order No. / External Order No." autocomplete="off">
+    <button id="searchSummaryBtn" class="summary-search-btn" type="button">Search</button>
+    <button id="searchSummaryClear" class="summary-search-clear" type="button">Clear</button>
+  </div>
+  <div id="searchSummaryValue" class="summary-value">—</div>
+  <div id="searchSummaryText" class="summary-sub">Enter an Order No. or External Order No. and click Search.</div>
+  <div id="searchSummaryResult" class="search-summary-result"></div>
+</div>
    <div class="ops-card"><h3>📅 Month Summary</h3><div class="big" id="monthSummaryOrders">0</div><div class="muted" id="monthSummaryText">All Months • current order population</div></div>
    <div class="ops-card"><h3>⚡ Current KPI Summary</h3><div class="big" id="quickSummaryQty">0</div><div class="muted" id="quickSummaryText">Order Qty • current filters</div></div>
  </section>
@@ -3167,5 +3194,91 @@ try {
   }
 })();
 </script>
+
+<script>
+(function(){
+  const input = document.getElementById('searchSummaryInput');
+  const btn = document.getElementById('searchSummaryBtn');
+  const clear = document.getElementById('searchSummaryClear');
+  const value = document.getElementById('searchSummaryValue');
+  const text = document.getElementById('searchSummaryText');
+  const result = document.getElementById('searchSummaryResult');
+  if(!input || !btn || !clear) return;
+
+  function norm(v){ return String(v ?? '').trim().toLowerCase(); }
+  function esc(v){ return String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function getData(){
+    const candidates=[window.reportRows,window.orderData,window.orders,window.vinculumData,window.allRows,window.rows,window.dataRows,window.filteredRows];
+    for(const x of candidates) if(Array.isArray(x)&&x.length) return x;
+    try{
+      for(const k of Object.keys(window)){
+        if(!/rows|orders|data/i.test(k)) continue;
+        const x=window[k];
+        if(Array.isArray(x)&&x.length&&typeof x[0]==='object') return x;
+      }
+    }catch(e){}
+    return [];
+  }
+
+  function field(o,names){
+    if(!o||typeof o!=='object') return '';
+    for(const n of names) if(Object.prototype.hasOwnProperty.call(o,n)&&o[n]!=null) return o[n];
+    for(const k of Object.keys(o)){
+      const nk=norm(k).replace(/[^a-z0-9]/g,'');
+      for(const n of names){
+        const nn=norm(n).replace(/[^a-z0-9]/g,'');
+        if(nk===nn||nk.includes(nn)||nn.includes(nk)) return o[k];
+      }
+    }
+    return '';
+  }
+
+  function doSearch(){
+    const q=norm(input.value);
+    if(!q){
+      value.textContent='—';
+      text.textContent='Enter an Order No. or External Order No. and click Search.';
+      result.innerHTML=''; result.classList.remove('show'); return;
+    }
+
+    const data=getData();
+    const matches=data.filter(row=>{
+      const a=norm(field(row,['Order No','OrderNo','Order Number','Order Number.','order_no','orderNo']));
+      const b=norm(field(row,['External Order No','ExternalOrderNo','External Order Number','external_order_no','externalOrderNo']));
+      return a.includes(q)||b.includes(q);
+    });
+
+    if(!matches.length){
+      // Also pass the query to the existing top search if the dashboard owns the dataset elsewhere.
+      const top=document.querySelector('input[placeholder*="Search Order"]');
+      if(top){ top.value=input.value.trim(); top.dispatchEvent(new Event('input',{bubbles:true})); }
+      value.textContent='Not found';
+      text.textContent=`No order found for "${input.value.trim()}".`;
+      result.innerHTML='<div class="search-empty">Order not found. Check the Order No. / External Order No.</div>';
+      result.classList.add('show'); return;
+    }
+
+    const row=matches[0];
+    const fields=[
+      ['Order No.',field(row,['Order No','OrderNo','Order Number','Order Number.','order_no','orderNo'])],
+      ['External Order No.',field(row,['External Order No','ExternalOrderNo','External Order Number','external_order_no','externalOrderNo'])],
+      ['Status',field(row,['Status','status'])],
+      ['Order Qty',field(row,['Order Qty','OrderQty','Quantity','Qty','order_qty'])],
+      ['Warehouse',field(row,['Warehouse','warehouse'])],
+      ['Create Date',field(row,['Order Create Date','OrderCreateDate','Order Creation Date','Create Date','create_date'])]
+    ].filter(x=>String(x[1]??'').trim()!=='');
+    value.textContent=fields[0]?.[1]||input.value.trim();
+    text.textContent=`${matches.length} matching row${matches.length>1?'s':''} found.`;
+    result.innerHTML=fields.map(x=>`<div class="search-hit-row"><span class="search-hit-label">${esc(x[0])}</span><span class="search-hit-value">${esc(x[1])}</span></div>`).join('');
+    result.classList.add('show');
+  }
+
+  btn.addEventListener('click',doSearch);
+  input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();doSearch();} if(e.key==='Escape')clear.click();});
+  clear.addEventListener('click',()=>{input.value='';value.textContent='—';text.textContent='Enter an Order No. or External Order No. and click Search.';result.innerHTML='';result.classList.remove('show');input.focus();});
+})();
+</script>
+
 </body>
 </html>
