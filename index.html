@@ -10,6 +10,14 @@
 .header{background:#151b23;color:#fff;padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:20px}
 .title{display:flex;align-items:center;gap:14px}.logo{width:42px;height:42px;border-radius:10px;background:#f57c00;display:grid;place-items:center;font-weight:900}
 h1{font-size:22px;margin:0 0 4px}.sub{font-size:13px;color:#aeb9c6}
+.header-tools{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.header-search{display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #d4dbe3;border-radius:8px;padding:0 10px;min-width:260px;height:40px}
+.header-search input{border:0;outline:0;background:transparent;color:#182230;min-width:0;width:100%;padding:8px 4px;font-size:14px}
+.header-search input::placeholder{color:#7b8794}
+.header-tool-icon{font-size:18px;color:#637181;line-height:1}
+.header-month{display:flex;align-items:center;gap:7px;height:40px;background:#242c36;border:1px solid #38414c;border-radius:8px;padding:0 8px 0 10px;color:#dce4ed}
+.header-month label{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.3px}
+.header-month select{min-width:132px;height:34px;padding:6px 8px;border:1px solid #4a5563;border-radius:6px;background:#fff;color:#182230;font-size:13px}
 .actions{display:flex;gap:9px;align-items:center}button,.upload-label{border:1px solid #d4dbe3;background:#fff;padding:10px 14px;border-radius:8px;font-weight:700;cursor:pointer}
 .primary{background:#111;color:#fff;border-color:#111}.green{background:#eaf8ef;color:#18753b;border-color:#bce7ca}
 .wrap{max-width:1500px;margin:auto;padding:20px}.section-title{font-size:18px;font-weight:800;margin:0 0 14px}
@@ -32,8 +40,8 @@ select,input{min-width:145px;padding:10px;border:1px solid #ccd5df;border-radius
 table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;border-bottom:1px solid #edf0f3;text-align:left;white-space:nowrap}th{position:sticky;top:0;background:#f7f9fb;z-index:1}
 .status{padding:4px 8px;border-radius:12px;background:#eef5ff;color:#1667b5;font-weight:700}
 .note{font-size:12px;color:#6d7a88;margin:6px 0 12px}#file{display:none}
-@media(max-width:1050px){.kpis{grid-template-columns:repeat(3,1fr)}.grid{grid-template-columns:1fr}}
-@media(max-width:650px){.kpis{grid-template-columns:repeat(2,1fr)}.wrap{padding:10px}}
+@media(max-width:1050px){.kpis{grid-template-columns:repeat(3,1fr)}.grid{grid-template-columns:1fr}.header-tools{width:100%;justify-content:flex-start}}
+@media(max-width:650px){.kpis{grid-template-columns:repeat(2,1fr)}.wrap{padding:10px}.header{padding:14px;align-items:flex-start;flex-direction:column}.header-tools{width:100%;display:grid;grid-template-columns:1fr;gap:8px}.header-search{width:100%;min-width:0}.header-month{width:100%;justify-content:space-between}.header-month select{flex:1;min-width:0}.actions{width:100%;flex-wrap:wrap}.actions .upload-label,.actions button{flex:1;text-align:center}}
 
 .tabs{background:#151b23;padding:0 28px 12px;display:flex;gap:8px}
 .tab{border:1px solid #38414c;background:#242c36;color:#dce4ed;padding:10px 16px;border-radius:8px 8px 0 0;cursor:pointer;font-weight:700}
@@ -214,10 +222,22 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 <body>
 <header class="header">
  <div class="title"><div class="logo">V</div><div><h1>PW- Master Dashboard</h1><div class="sub" id="sourceText">Loading latest central Vinculum report…</div></div></div>
- <div class="actions">
-   <label class="upload-label primary" for="file">＋ Upload Vinculum Excel</label>
-   <button onclick="resetAll()">↻ Reset</button>
-   <div class="counterapi" ns="kamal2-pal.github.io/PW-Master-Dashboard" action="view" key="master-dashboard" label="views" noIcon="true" noLink="true" style="min-height:32px;display:flex;align-items:center;"></div>
+ <div class="header-tools">
+   <div class="header-search">
+     <span class="header-tool-icon">⌕</span>
+     <input id="globalOrderSearch" type="search" placeholder="Search Order No…" aria-label="Search Order No">
+   </div>
+   <div class="header-month">
+     <label for="globalMonthFilter">Month</label>
+     <select id="globalMonthFilter" aria-label="Filter by month">
+       <option value="">All Months</option>
+     </select>
+   </div>
+   <div class="actions">
+     <label class="upload-label primary" for="file">＋ Upload Vinculum Excel</label>
+     <button onclick="resetAll()">↻ Reset</button>
+     <div class="counterapi" ns="kamal2-pal.github.io/PW-Master-Dashboard" action="view" key="master-dashboard" label="views" noIcon="true" noLink="true" style="min-height:32px;display:flex;align-items:center;"></div>
+   </div>
  </div>
  <input id="file" type="file" accept=".xlsx,.xlsb,.xlsm,.xls,.csv">
 </header>
@@ -621,6 +641,56 @@ function num(v) {
 function unique(arr) { return [...new Set(arr.filter(v => v !== "" && v != null).map(String))].sort((a,b)=>a.localeCompare(b)); }
 function get(row, names) { for (const n of names) if (Object.prototype.hasOwnProperty.call(row,n)) return row[n]; return ""; }
 
+/* ===== Global dashboard filters =====
+   Header search + month filter apply to the order-based dashboard tabs.
+   B2C and Offroll keep their own independent filters/data sources.
+*/
+let globalOrderSearch = "";
+let globalMonthFilter = "";
+
+function globalFilteredRows(){
+  const q=String(globalOrderSearch||"").trim().toLowerCase();
+  const month=String(globalMonthFilter||"").trim();
+  if(!q && !month) return raw;
+
+  return raw.filter(r=>{
+    if(q){
+      const orderNo=String(get(r,["Order No"])||"").toLowerCase();
+      const external=String(get(r,["Extern Order No","External Order No","External OrderNo"])||"").toLowerCase();
+      if(!orderNo.includes(q) && !external.includes(q)) return false;
+    }
+    if(month){
+      const d=localDateKey(get(r,["Order create date","OrderDate"]));
+      if(!d || d.slice(0,7)!==month) return false;
+    }
+    return true;
+  });
+}
+
+function populateGlobalMonthFilter(){
+  const el=document.getElementById("globalMonthFilter");
+  if(!el) return;
+  const months=[...new Set(raw.map(r=>localDateKey(get(r,["Order create date","OrderDate"]))).filter(Boolean).map(d=>d.slice(0,7)))].sort().reverse();
+  const current=globalMonthFilter;
+  el.innerHTML='<option value="">All Months</option>'+months.map(m=>{
+    const [y,mo]=m.split("-");
+    const label=new Date(Number(y),Number(mo)-1,1).toLocaleString(undefined,{month:"long",year:"numeric"});
+    return `<option value="${m}">${label}</option>`;
+  }).join("");
+  if(months.includes(current)) el.value=current;
+  else { globalMonthFilter=""; el.value=""; }
+}
+
+function applyGlobalDashboardFilters(){
+  populateGlobalMonthFilter();
+  populateFilters();
+  applyFilters();
+  initSlaFilters();
+  applySlaFilters();
+  initManifestFilters();
+  applyManifestFilters();
+}
+
 function orderLevel(rows) {
   // Keep EXACTLY the same order population for all 3 tabs.
   // One Order No = one dashboard order, but merge information from
@@ -678,17 +748,18 @@ function fillSelect(id, values, label) {
 function esc(v) { return String(v).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
 
 function populateFilters() {
-  fillSelect("warehouse",raw.map(r=>get(r,["FulfillmentLocationName"])),"All Warehouses");
-  fillSelect("channel",raw.map(r=>get(r,["finance_category","Finance Category"])),"All Finance Categories");
-  fillSelect("status",raw.map(r=>get(r,["Status"])),"All Status");
-  fillSelect("orderType",raw.map(r=>get(r,["Order Type"])),"All Order Types");
+  const rows=globalFilteredRows();
+  fillSelect("warehouse",rows.map(r=>get(r,["FulfillmentLocationName"])),"All Warehouses");
+  fillSelect("channel",rows.map(r=>get(r,["finance_category","Finance Category"])),"All Finance Categories");
+  fillSelect("status",rows.map(r=>get(r,["Status"])),"All Status");
+  fillSelect("orderType",rows.map(r=>get(r,["Order Type"])),"All Order Types");
 }
 
 function applyFilters() {
   const w=document.getElementById("warehouse").value, c=document.getElementById("channel").value;
   const s=document.getElementById("status").value, o=document.getElementById("orderType").value;
   const f=document.getElementById("fromDate").value, t=document.getElementById("toDate").value;
-  current=raw.filter(r=>{
+  current=globalFilteredRows().filter(r=>{
     if(w && String(get(r,["FulfillmentLocationName"]))!==w) return false;
     if(c && String(get(r,["finance_category","Finance Category"]))!==c) return false;
     if(s && String(get(r,["Status"]))!==s) return false;
@@ -740,11 +811,12 @@ function dateRangeFromRows(rows, fieldNames){
   return vals.length ? {from:vals[0],to:vals[vals.length-1]} : null;
 }
 function renderOrderCoverageAndYesterday(){
-  const range=dateRangeFromRows(raw,["Order create date","OrderDate"]);
+  const scoped=globalFilteredRows();
+  const range=dateRangeFromRows(scoped,["Order create date","OrderDate"]);
   const cov=document.getElementById("orderCoverage");
-  cov.textContent=range ? `Order data coverage (Order create date): ${formatDateKey(range.from)} → ${formatDateKey(range.to)} • ${raw.length.toLocaleString()} report rows` : "Order data coverage: no valid Order create date found";
+  cov.textContent=range ? `Order data coverage (Order create date): ${formatDateKey(range.from)} → ${formatDateKey(range.to)} • ${scoped.length.toLocaleString()} report rows` : "Order data coverage: no valid Order create date found";
   const y=yesterdayKey();
-  const yr=raw.filter(r=>localDateKey(get(r,["Order create date","OrderDate"]))===y);
+  const yr=scoped.filter(r=>localDateKey(get(r,["Order create date","OrderDate"]))===y);
   const yo=orderLevel(yr);
   const qty=yr.reduce((a,r)=>a+num(get(r,["Order Qty"])),0);
   const picked=yr.reduce((a,r)=>a+num(get(r,["Picked Qty"])),0);
@@ -789,7 +861,15 @@ function clearFilters() {
   document.getElementById("fromDate").value="";document.getElementById("toDate").value="";
   applyFilters();
 }
-function resetAll(){ loadCentralExcel(); }
+function resetAll(){
+  globalOrderSearch="";
+  globalMonthFilter="";
+  const q=document.getElementById("globalOrderSearch");
+  const m=document.getElementById("globalMonthFilter");
+  if(q) q.value="";
+  if(m) m.value="";
+  loadCentralExcel();
+}
 
 function normalizeRows(rows){
   return (rows||[]).map(r=>{
@@ -854,6 +934,7 @@ function loadCentralReportLocally(){
     const obj=JSON.parse(saved);
     if(!obj || !Array.isArray(obj.rows) || !obj.rows.length) return false;
     raw=obj.rows;
+    populateGlobalMonthFilter();
     populateFilters(); clearFilters();
     initSlaFilters(); applySlaFilters();
     initManifestFilters(); applyManifestFilters();
@@ -887,6 +968,7 @@ async function loadCentralExcel(){
     raw = normalizeRows(XLSX.utils.sheet_to_json(ws,{defval:""}));
     if(!raw.length) throw new Error("data.xlsx is empty");
 
+    populateGlobalMonthFilter();
     populateFilters();
     clearFilters();
     initSlaFilters();
@@ -961,6 +1043,7 @@ document.getElementById("file").addEventListener("change",async e=>{
     const data=parseWorkbookBuffer(await file.arrayBuffer());
     if(!data.length) throw new Error("Excel file is empty");
     raw=data;
+    populateGlobalMonthFilter();
     // This is now the NEW CURRENT FILE. Persist it for refresh/reopen.
     saveCentralReportLocally(raw,file.name);
     populateFilters(); clearFilters();
@@ -976,6 +1059,22 @@ document.getElementById("file").addEventListener("change",async e=>{
   }
 });
 
+const globalOrderSearchEl=document.getElementById("globalOrderSearch");
+const globalMonthFilterEl=document.getElementById("globalMonthFilter");
+if(globalOrderSearchEl){
+  globalOrderSearchEl.addEventListener("input",()=>{
+    globalOrderSearch=globalOrderSearchEl.value;
+    applyGlobalDashboardFilters();
+  });
+}
+if(globalMonthFilterEl){
+  globalMonthFilterEl.addEventListener("change",()=>{
+    globalMonthFilter=globalMonthFilterEl.value;
+    applyGlobalDashboardFilters();
+  });
+}
+
+populateGlobalMonthFilter();
 populateFilters(); render();
 
 let slaCurrent = [];
@@ -1014,7 +1113,7 @@ function parseSlaDate(v){
 
 function buildSlaRows(){
   const now = new Date();
-  const orders = orderLevel(raw);
+  const orders = orderLevel(globalFilteredRows());
 
   return orders.map(r => {
     const orderDate = parseSlaDate(get(r,["Order create date","OrderDate"]));
@@ -1238,7 +1337,7 @@ let manifestCurrent = [];
 
 function buildManifestRows(){
   const now = new Date();
-  const orders = orderLevel(raw);
+  const orders = orderLevel(globalFilteredRows());
   return orders.map(r => {
     const status = String(get(r,["Status"])).trim().toLowerCase();
     const orderDate = parseSlaDate(get(r,["Order create date","OrderDate"]));
@@ -2512,6 +2611,15 @@ function b2cFilteredRows(){
     const d=b2cDateKey(b2cOrderCreate(r));
     if(f && (!d || d<f))return false;
     if(t && (!d || d>t))return false;
+
+    // Header-level Order Search / Month filter also apply to B2C.
+    if(globalOrderSearch){
+      const q=String(globalOrderSearch).trim().toLowerCase();
+      const orderNo=String(get(r,["Order No"])||"").toLowerCase();
+      const external=String(get(r,["Extern Order No","External Order No","External OrderNo"])||"").toLowerCase();
+      if(!orderNo.includes(q) && !external.includes(q))return false;
+    }
+    if(globalMonthFilter && (!d || d.slice(0,7)!==globalMonthFilter))return false;
     const st=b2cUnifiedStatus(r)?.status || "";
     if(sf && st!==sf)return false;
     const orderStatus=b2cOrderStatus(r);
