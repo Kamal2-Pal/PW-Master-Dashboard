@@ -217,9 +217,31 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
 .good{color:#187a43;font-weight:800}.bad{color:#c52f2f;font-weight:800}
 .mini-chart{height:220px;display:flex;align-items:flex-end;gap:6px;overflow:auto;padding:12px 4px 0}.mini-col{min-width:52px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:5px}.mini-bar{width:28px;min-height:4px;background:#1f6fb2;border-radius:4px 4px 0 0}.mini-value{font-size:10px;color:#4d5b68;white-space:nowrap}.mini-label{font-size:9px;color:#6c7783;white-space:nowrap}.empty{padding:18px;color:#6b7785}
 
+
+/* ===== Company login ===== */
+body.auth-locked > header, body.auth-locked > .tabs, body.auth-locked > main { display:none !important; }
+.auth-overlay{position:fixed;inset:0;background:linear-gradient(135deg,#101720,#1b2735);display:flex;align-items:center;justify-content:center;padding:20px;z-index:99999}
+.auth-card{width:min(430px,100%);background:#fff;border-radius:18px;padding:32px;box-shadow:0 20px 70px rgba(0,0,0,.35);text-align:center}
+.auth-logo{width:54px;height:54px;border-radius:14px;background:#f57c00;color:#fff;display:grid;place-items:center;margin:0 auto 16px;font-size:22px;font-weight:900}
+.auth-card h2{margin:0 0 8px;font-size:24px}.auth-card p{color:#667788;line-height:1.5;margin:0 0 20px}.auth-btn{width:100%;height:46px;border:1px solid #d4dbe3;border-radius:9px;background:#111;color:#fff;font-weight:800;cursor:pointer;font-size:14px}.auth-btn:disabled{opacity:.6;cursor:wait}.auth-msg{min-height:22px;margin-top:12px;font-size:12px;color:#b42318}.auth-user{display:flex;align-items:center;gap:8px;font-size:12px;color:#dce4ed;padding:0 8px}.auth-user button{padding:7px 9px;background:#242c36;color:#fff;border-color:#46515e}
+/* ===== Operations summary additions ===== */
+.ops-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}.ops-card{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:15px}.ops-card h3{margin:0 0 6px;font-size:15px}.ops-card .big{font-size:26px;font-weight:900;margin:7px 0}.ops-card .muted{font-size:12px;color:#687789}.ops-card table{width:100%;border-collapse:collapse;font-size:12px}.ops-card th,.ops-card td{padding:6px 4px;border-bottom:1px solid #edf0f3;text-align:left}.ops-card th{font-size:10px;text-transform:uppercase;color:#718091}.ops-search-result{margin-bottom:16px;background:#fff;border:1px solid #dce4eb;border-radius:12px;padding:16px}.ops-search-result.hidden{display:none}.ops-search-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.ops-search-grid .item{background:#f6f8fa;border-radius:8px;padding:9px}.ops-search-grid small{display:block;color:#6b7785;text-transform:uppercase;font-weight:700;font-size:10px}.ops-search-grid strong{display:block;margin-top:4px;font-size:14px}.kpi.kpi-clickable{cursor:pointer;transition:.15s}.kpi.kpi-clickable:hover{transform:translateY(-1px);box-shadow:0 5px 15px #00000012}.kpi.kpi-active{outline:2px solid #f57c00;outline-offset:1px}
+@media(max-width:900px){.ops-summary{grid-template-columns:1fr}.ops-search-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.ops-search-grid{grid-template-columns:1fr}}
+
 </style>
 </head>
-<body>
+<body class="auth-locked">
+<div id="companyAuthOverlay" class="auth-overlay" style="display:flex;">
+  <div class="auth-card">
+    <div class="auth-logo">V</div>
+    <h2>PW- Master Dashboard</h2>
+    <p>Company login required.<br>Only authorised <b>@xylemlearning.com</b> accounts can access this dashboard.</p>
+    <button id="companyGoogleLogin" class="auth-btn" type="button">Continue with Company Google</button>
+    <div id="authMessage" class="auth-msg">Please sign in with your company account.</div>
+  </div>
+</div>
+
 <header class="header">
  <div class="title"><div class="logo">V</div><div><h1>PW- Master Dashboard</h1><div class="sub" id="sourceText">Loading latest central Vinculum report…</div></div></div>
  <div class="header-tools">
@@ -234,6 +256,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
      </select>
    </div>
    <div class="actions">
+     <div id="authUser" class="auth-user" style="display:none"></div>
      <label class="upload-label primary" for="file">＋ Upload Vinculum Excel</label>
      <button onclick="resetAll()">↻ Reset</button>
      <div class="counterapi" ns="kamal2-pal.github.io/PW-Master-Dashboard" action="view" key="master-dashboard" label="views" noIcon="true" noLink="true" style="min-height:32px;display:flex;align-items:center;"></div>
@@ -266,6 +289,23 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:9px 10px;
    <div class="section-title">Yesterday Summary</div>
    <div class="note" id="orderYesterdayNote">Yesterday = calculating from Order create date.</div>
    <div class="kpis sla-kpis" id="orderYesterdayCards" style="grid-template-columns:repeat(5,1fr);margin-bottom:0"></div>
+ </section>
+
+
+ <section class="ops-summary" id="opsSummary">
+   <div class="ops-card"><h3>🔎 Search Summary</h3><div class="big" id="searchSummaryCount">0</div><div class="muted" id="searchSummaryText">Type an Order No. or External Order No. in the header.</div></div>
+   <div class="ops-card"><h3>📅 Month Summary</h3><div class="big" id="monthSummaryOrders">0</div><div class="muted" id="monthSummaryText">All Months • current order population</div></div>
+   <div class="ops-card"><h3>⚡ Current KPI Summary</h3><div class="big" id="quickSummaryQty">0</div><div class="muted" id="quickSummaryText">Order Qty • current filters</div></div>
+ </section>
+ <section id="opsSearchResult" class="ops-search-result hidden">
+   <div class="section-title">Order Search Result</div>
+   <div class="note" id="opsSearchNote"></div>
+   <div id="opsSearchGrid" class="ops-search-grid"></div>
+ </section>
+ <section class="card" style="margin-bottom:16px" id="monthSummaryCard">
+   <div class="section-title">Month-wise Summary</div>
+   <div class="note">Month summary uses <b>Order create date</b>, unique Order No. and Order Qty.</div>
+   <div class="table-wrap"><table><thead><tr><th>Month</th><th>Unique Orders</th><th>Order Qty</th><th>Picked Qty</th><th>Shipped Qty</th><th>Open Qty</th></tr></thead><tbody id="monthSummaryTbody"></tbody></table></div>
  </section>
 
  <div class="note" style="margin:0 0 10px 4px">Order Fulfillment filters and daily reporting use <b>Order create date</b>. Channel dimension is <b>finance_category</b>.</div>
@@ -844,7 +884,11 @@ function render() {
     ["Unique Orders",orders.length],["Total Order Qty",totalQty],["Picked Qty",picked],
     ["Shipped Qty",shipped],["Open Qty",open],["Cancelled Orders",cancelled]
   ];
-  document.getElementById("kpis").innerHTML=cards.map(([k,v])=>`<div class="kpi"><small>${k}</small><strong>${Number(v).toLocaleString()}</strong></div>`).join("");
+  document.getElementById("kpis").innerHTML=cards.map(([k,v])=>{
+    const key = k==="Open Qty" ? "open" : k==="Cancelled Orders" ? "cancelled" : k==="Shipped Qty" ? "shipped" : k==="Picked Qty" ? "picked" : "all";
+    return `<div class="kpi kpi-clickable" data-kpi="${key}" title="Click to filter the order table"><small>${k}</small><strong>${Number(v).toLocaleString()}</strong></div>`;
+  }).join("");
+  updateOperationsSummary();
 
   hbar("statusChart","",counts(orders,"Status"));
   hbar("warehouseChart","",counts(orders,"FulfillmentLocationName"));
@@ -858,6 +902,77 @@ function render() {
 }
 
 ["warehouse","channel","status","orderType","fromDate","toDate"].forEach(id=>document.getElementById(id).addEventListener("change",applyFilters));
+
+
+function updateOperationsSummary(){
+  const scoped=globalFilteredRows();
+  const orders=orderLevel(current);
+  const q=String(globalOrderSearch||'').trim();
+  const searchEl=document.getElementById('searchSummaryCount');
+  const searchText=document.getElementById('searchSummaryText');
+  if(searchEl) searchEl.textContent=q ? orders.length.toLocaleString() : '—';
+  if(searchText) searchText.textContent=q ? `${orders.length.toLocaleString()} matching unique order(s) for “${q}”` : 'Type an Order No. or External Order No. in the header.';
+
+  const monthEl=document.getElementById('monthSummaryOrders');
+  const monthText=document.getElementById('monthSummaryText');
+  if(monthEl) monthEl.textContent=orders.length.toLocaleString();
+  if(monthText) monthText.textContent=globalMonthFilter ? `${monthLabel(globalMonthFilter)} • current order population` : 'All Months • current order population';
+
+  const qty=scoped.reduce((a,r)=>a+num(get(r,['Order Qty'])),0);
+  const qtyEl=document.getElementById('quickSummaryQty');
+  const qtyText=document.getElementById('quickSummaryText');
+  if(qtyEl) qtyEl.textContent=qty.toLocaleString();
+  if(qtyText) qtyText.textContent='Order Qty • current filters';
+
+  const by=new Map();
+  scoped.forEach(r=>{
+    const d=localDateKey(get(r,['Order create date','OrderDate'])); if(!d) return;
+    const m=d.slice(0,7); const x=by.get(m)||{rows:[],qty:0,picked:0,shipped:0,open:0};
+    x.rows.push(r); x.qty+=num(get(r,['Order Qty'])); x.picked+=num(get(r,['Picked Qty'])); x.shipped+=num(get(r,['Shipped Qty'])); x.open+=num(get(r,['Open Qty'])); by.set(m,x);
+  });
+  const tbody=document.getElementById('monthSummaryTbody');
+  if(tbody){
+    const months=[...by.keys()].sort().reverse();
+    tbody.innerHTML=months.length ? months.map(m=>{
+      const x=by.get(m); return `<tr><td><b>${esc(monthLabel(m))}</b></td><td>${orderLevel(x.rows).length.toLocaleString()}</td><td>${x.qty.toLocaleString()}</td><td>${x.picked.toLocaleString()}</td><td>${x.shipped.toLocaleString()}</td><td>${x.open.toLocaleString()}</td></tr>`;
+    }).join('') : '<tr><td colspan="6">No data</td></tr>';
+  }
+
+  renderOrderSearchResult();
+}
+function monthLabel(m){
+  if(!m) return 'All Months';
+  const [y,mo]=m.split('-'); return new Date(Number(y),Number(mo)-1,1).toLocaleString(undefined,{month:'long',year:'numeric'});
+}
+function renderOrderSearchResult(){
+  const box=document.getElementById('opsSearchResult');
+  if(!box)return;
+  const q=String(globalOrderSearch||'').trim().toLowerCase();
+  if(!q){box.classList.add('hidden');return;}
+  const matches=orderLevel(globalFilteredRows()).slice(0,20);
+  box.classList.remove('hidden');
+  document.getElementById('opsSearchNote').textContent = matches.length ? `${matches.length} matching unique order(s). Showing up to 20.` : 'No matching order found.';
+  document.getElementById('opsSearchGrid').innerHTML=matches.map(r=>{
+    const qty=num(get(r,['Order Qty'])); const picked=num(get(r,['Picked Qty'])); const shipped=num(get(r,['Shipped Qty'])); const open=num(get(r,['Open Qty']));
+    return `<div class="item"><small>Order No</small><strong>${esc(get(r,['Order No']))}</strong><small style="margin-top:8px">Status</small><strong>${esc(get(r,['Status']))}</strong><small style="margin-top:8px">Order Date</small><strong>${esc(get(r,['Order create date','OrderDate']))}</strong><small style="margin-top:8px">Qty / Picked / Shipped / Open</small><strong>${qty.toLocaleString()} / ${picked.toLocaleString()} / ${shipped.toLocaleString()} / ${open.toLocaleString()}</strong></div>`;
+  }).join('');
+}
+function applyKpiFilter(key){
+  document.querySelectorAll('#kpis .kpi').forEach(x=>x.classList.remove('kpi-active'));
+  const el=document.querySelector(`#kpis .kpi[data-kpi="${key}"]`); if(el)el.classList.add('kpi-active');
+  const rows=globalFilteredRows();
+  if(key==='all'){ current=rows; }
+  else if(key==='cancelled'){ current=rows.filter(r=>String(get(r,['Status'])).toLowerCase()==='cancelled'); }
+  else if(key==='open'){ current=rows.filter(r=>num(get(r,['Open Qty']))>0); }
+  else if(key==='picked'){ current=rows.filter(r=>num(get(r,['Picked Qty']))>0); }
+  else if(key==='shipped'){ current=rows.filter(r=>num(get(r,['Shipped Qty']))>0); }
+  render();
+  document.querySelector('.table-card')?.scrollIntoView({behavior:'smooth',block:'start'});
+}
+document.addEventListener('click',e=>{
+  const card=e.target.closest('#kpis .kpi[data-kpi]');
+  if(card) applyKpiFilter(card.dataset.kpi);
+});
 
 function clearFilters() {
   ["warehouse","channel","status","orderType"].forEach(id=>document.getElementById(id).value="");
@@ -2878,65 +2993,82 @@ try {
 
 </script>
 
-<!-- Supabase Realtime Presence: current dashboard sessions -->
+<!-- Supabase Auth + Realtime Presence -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-(function () {
+(function(){
   const SUPABASE_URL = "https://nfacejugcsbmljqqswpy.supabase.co";
   const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_nH2Bmsb9gm29Txb9-9pynw_-vzcFSHX";
+  const COMPANY_EMAIL_DOMAIN = "xylemlearning.com";
+  const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  const overlay=document.getElementById('companyAuthOverlay');
+  const loginBtn=document.getElementById('companyGoogleLogin');
+  const authMsg=document.getElementById('authMessage');
+  const authUser=document.getElementById('authUser');
 
-  const countEl = document.getElementById("liveUsersCount");
-  if (!countEl || !window.supabase) return;
-
-  const client = window.supabase.createClient(
-    SUPABASE_URL,
-    SUPABASE_PUBLISHABLE_KEY
-  );
-
-  // One unique session per open dashboard tab.
-  let sessionId = sessionStorage.getItem("pw_dashboard_live_session");
-  if (!sessionId) {
-    sessionId =
-      "session-" +
-      Date.now() +
-      "-" +
-      Math.random().toString(36).slice(2);
-    sessionStorage.setItem("pw_dashboard_live_session", sessionId);
+  function showError(msg){ if(authMsg) authMsg.textContent=msg; }
+  function setUnlocked(user){
+    document.body.classList.remove('auth-locked');
+    if(overlay) overlay.style.display='none';
+    if(authUser){
+      authUser.style.display='flex';
+      const email=esc(user?.email||'');
+      authUser.innerHTML=`<span>👤 ${email}</span><button id="logoutBtn" type="button">Logout</button>`;
+      document.getElementById('logoutBtn')?.addEventListener('click',async()=>{await client.auth.signOut(); location.reload();});
+    }
+  }
+  function setLocked(){
+    document.body.classList.add('auth-locked');
+    if(overlay) overlay.style.display='flex';
+  }
+  function allowed(user){
+    const email=String(user?.email||'').toLowerCase().trim();
+    return email.endsWith('@'+COMPANY_EMAIL_DOMAIN);
   }
 
-  const channel = client.channel("pw-master-dashboard-live-users", {
-    config: {
-      presence: {
-        key: sessionId
+  loginBtn?.addEventListener('click',async()=>{
+    loginBtn.disabled=true; showError('Opening company Google login…');
+    const {error}=await client.auth.signInWithOAuth({
+      provider:'google',
+      options:{redirectTo:window.location.origin+window.location.pathname}
+    });
+    if(error){showError(error.message);loginBtn.disabled=false;}
+  });
+
+  client.auth.onAuthStateChange(async(event,session)=>{
+    if(session?.user){
+      if(!allowed(session.user)){
+        showError(`Only @${COMPANY_EMAIL_DOMAIN} company accounts are allowed.`);
+        await client.auth.signOut(); setLocked(); return;
       }
+      setUnlocked(session.user);
+      startPresence(session.user);
+    }else{
+      setLocked();
     }
   });
 
-  function renderLiveCount() {
-    const state = channel.presenceState();
-    const count = Object.keys(state).length;
-    countEl.textContent = String(count);
-  }
+  client.auth.getSession().then(({data})=>{
+    if(data.session?.user && allowed(data.session.user)){
+      setUnlocked(data.session.user); startPresence(data.session.user);
+    }else if(data.session?.user){
+      client.auth.signOut(); setLocked();
+    }else setLocked();
+  });
 
-  channel
-    .on("presence", { event: "sync" }, renderLiveCount)
-    .on("presence", { event: "join" }, renderLiveCount)
-    .on("presence", { event: "leave" }, renderLiveCount)
-    .subscribe(async (status) => {
-      if (status === "SUBSCRIBED") {
-        await channel.track({
-          page: "PW Master Dashboard",
-          connected_at: new Date().toISOString()
-        });
-        renderLiveCount();
+  function startPresence(user){
+    const countEl=document.getElementById('liveUsersCount'); if(!countEl)return;
+    const sessionId='session-'+(user.id||'user')+'-'+Date.now()+'-'+Math.random().toString(36).slice(2);
+    const channel=client.channel('pw-master-dashboard-live-users',{config:{presence:{key:sessionId}}});
+    const render=()=>{countEl.textContent=String(Object.keys(channel.presenceState()).length);};
+    channel.on('presence',{event:'sync'},render).on('presence',{event:'join'},render).on('presence',{event:'leave'},render).subscribe(async status=>{
+      if(status==='SUBSCRIBED'){
+        await channel.track({page:'PW Master Dashboard',email:user.email,connected_at:new Date().toISOString()});
+        render();
       }
     });
-
-  // If the tab becomes hidden, keep the connection alive because it is
-  // still an open dashboard session. The count will drop automatically
-  // when the tab/browser disconnects.
+  }
 })();
 </script>
-
 </body>
 </html>
