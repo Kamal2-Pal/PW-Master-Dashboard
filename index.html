@@ -223,7 +223,10 @@ body.auth-locked > header, body.auth-locked > .tabs, body.auth-locked > main { d
 .auth-overlay{position:fixed;inset:0;background:linear-gradient(135deg,#101720,#1b2735);display:flex;align-items:center;justify-content:center;padding:20px;z-index:99999}
 .auth-card{width:min(430px,100%);background:#fff;border-radius:18px;padding:32px;box-shadow:0 20px 70px rgba(0,0,0,.35);text-align:center}
 .auth-logo{width:54px;height:54px;border-radius:14px;background:#f57c00;color:#fff;display:grid;place-items:center;margin:0 auto 16px;font-size:22px;font-weight:900}
-.auth-card h2{margin:0 0 8px;font-size:24px}.auth-card p{color:#667788;line-height:1.5;margin:0 0 20px}.auth-btn{width:100%;height:46px;border:1px solid #d4dbe3;border-radius:9px;background:#111;color:#fff;font-weight:800;cursor:pointer;font-size:14px}.auth-btn:disabled{opacity:.6;cursor:wait}.auth-msg{min-height:22px;margin-top:12px;font-size:12px;color:#b42318}.auth-user{display:flex;align-items:center;gap:8px;font-size:12px;color:#dce4ed;padding:0 8px}.auth-user button{padding:7px 9px;background:#242c36;color:#fff;border-color:#46515e}
+.auth-card h2{margin:0 0 8px;font-size:24px}.company-login-form{display:flex;flex-direction:column;gap:10px}
+.auth-input{width:100%;height:46px;border:1px solid #d4dbe3;border-radius:9px;padding:0 12px;font-size:14px;outline:none;background:#fff;color:#182230}
+.auth-input:focus{border-color:#8aa7c2;box-shadow:0 0 0 3px #8aa7c222}
+.auth-card p{color:#667788;line-height:1.5;margin:0 0 20px}.auth-btn{width:100%;height:46px;border:1px solid #d4dbe3;border-radius:9px;background:#111;color:#fff;font-weight:800;cursor:pointer;font-size:14px}.auth-btn:disabled{opacity:.6;cursor:wait}.auth-msg{min-height:22px;margin-top:12px;font-size:12px;color:#b42318}.auth-user{display:flex;align-items:center;gap:8px;font-size:12px;color:#dce4ed;padding:0 8px}.auth-user button{padding:7px 9px;background:#242c36;color:#fff;border-color:#46515e}
 /* ===== Operations summary additions ===== */
 .ops-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}.ops-card{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:15px}.ops-card h3{margin:0 0 6px;font-size:15px}.ops-card .big{font-size:26px;font-weight:900;margin:7px 0}.ops-card .muted{font-size:12px;color:#687789}.ops-card table{width:100%;border-collapse:collapse;font-size:12px}.ops-card th,.ops-card td{padding:6px 4px;border-bottom:1px solid #edf0f3;text-align:left}.ops-card th{font-size:10px;text-transform:uppercase;color:#718091}.ops-search-result{margin-bottom:16px;background:#fff;border:1px solid #dce4eb;border-radius:12px;padding:16px}.ops-search-result.hidden{display:none}.ops-search-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.ops-search-grid .item{background:#f6f8fa;border-radius:8px;padding:9px}.ops-search-grid small{display:block;color:#6b7785;text-transform:uppercase;font-weight:700;font-size:10px}.ops-search-grid strong{display:block;margin-top:4px;font-size:14px}.kpi.kpi-clickable{cursor:pointer;transition:.15s}.kpi.kpi-clickable:hover{transform:translateY(-1px);box-shadow:0 5px 15px #00000012}.kpi.kpi-active{outline:2px solid #f57c00;outline-offset:1px}
 @media(max-width:900px){.ops-summary{grid-template-columns:1fr}.ops-search-grid{grid-template-columns:repeat(2,1fr)}}
@@ -236,9 +239,15 @@ body.auth-locked > header, body.auth-locked > .tabs, body.auth-locked > main { d
   <div class="auth-card">
     <div class="auth-logo">V</div>
     <h2>PW- Master Dashboard</h2>
-    <p>Company login required.<br>Only authorised <b>email.endsWith("@pw.live")</b> accounts can access this dashboard.</p>
-    <button id="companyGoogleLogin" class="auth-btn" type="button">Continue with Company Google</button>
-    <div id="authMessage" class="auth-msg">Please sign in with your company account.</div>
+    <p>Company login required.<br>Only authorised <b>@pw.live</b> accounts can access this dashboard.</p>
+    <form id="companyLoginForm" class="company-login-form">
+      <input id="companyEmail" class="auth-input" type="email"
+             placeholder="Company Email (@pw.live)" autocomplete="username" required>
+      <input id="companyPassword" class="auth-input" type="password"
+             placeholder="Password" autocomplete="current-password" required>
+      <button id="companyEmailLogin" class="auth-btn" type="submit">Sign in with Company Email</button>
+    </form>
+    <div id="authMessage" class="auth-msg">Enter your @pw.live company email and password.</div>
   </div>
 </div>
 
@@ -2999,48 +3008,110 @@ try {
 (function(){
   const SUPABASE_URL = "https://nfacejugcsbmljqqswpy.supabase.co";
   const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_nH2Bmsb9gm29Txb9-9pynw_-vzcFSHX";
-  const COMPANY_EMAIL_DOMAIN = "email.endsWith("@pw.live")";
-  const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
-  const overlay=document.getElementById('companyAuthOverlay');
-  const loginBtn=document.getElementById('companyGoogleLogin');
-  const authMsg=document.getElementById('authMessage');
-  const authUser=document.getElementById('authUser');
+  const COMPANY_EMAIL_DOMAIN = "pw.live";
 
-  function showError(msg){ if(authMsg) authMsg.textContent=msg; }
+  const client = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_PUBLISHABLE_KEY
+  );
+
+  const overlay = document.getElementById('companyAuthOverlay');
+  const form = document.getElementById('companyLoginForm');
+  const emailInput = document.getElementById('companyEmail');
+  const passwordInput = document.getElementById('companyPassword');
+  const loginBtn = document.getElementById('companyEmailLogin');
+  const authMsg = document.getElementById('authMessage');
+  const authUser = document.getElementById('authUser');
+
+  function showError(msg){
+    if(authMsg) authMsg.textContent = msg;
+  }
+
   function setUnlocked(user){
     document.body.classList.remove('auth-locked');
-    if(overlay) overlay.style.display='none';
+    if(overlay) overlay.style.display = 'none';
+
     if(authUser){
-      authUser.style.display='flex';
-      const email=esc(user?.email||'');
-      authUser.innerHTML=`<span>👤 ${email}</span><button id="logoutBtn" type="button">Logout</button>`;
-      document.getElementById('logoutBtn')?.addEventListener('click',async()=>{await client.auth.signOut(); location.reload();});
+      authUser.style.display = 'flex';
+      const email = esc(user?.email || '');
+      authUser.innerHTML =
+        `<span>👤 ${email}</span><button id="logoutBtn" type="button">Logout</button>`;
+
+      document.getElementById('logoutBtn')?.addEventListener('click', async ()=>{
+        await client.auth.signOut();
+        location.reload();
+      });
     }
   }
+
   function setLocked(){
     document.body.classList.add('auth-locked');
-    if(overlay) overlay.style.display='flex';
-  }
-  function allowed(user){
-    const email=String(user?.email||'').toLowerCase().trim();
-    return email.endsWith('@'+COMPANY_EMAIL_DOMAIN);
+    if(overlay) overlay.style.display = 'flex';
   }
 
-  loginBtn?.addEventListener('click',async()=>{
-    loginBtn.disabled=true; showError('Opening company Google login…');
-    const {error}=await client.auth.signInWithOAuth({
-      provider:'google',
-      options:{redirectTo:window.location.origin+window.location.pathname}
-    });
-    if(error){showError(error.message);loginBtn.disabled=false;}
+  function allowed(user){
+    const email = String(user?.email || '').toLowerCase().trim();
+    return email.endsWith('@' + COMPANY_EMAIL_DOMAIN);
+  }
+
+  async function signInWithCompanyEmail(email, password){
+    const cleanEmail = String(email || '').trim().toLowerCase();
+
+    if(!cleanEmail.endsWith('@' + COMPANY_EMAIL_DOMAIN)){
+      showError('Only @pw.live company accounts are allowed.');
+      return;
+    }
+
+    if(!password){
+      showError('Please enter your password.');
+      return;
+    }
+
+    loginBtn.disabled = true;
+    showError('Signing in…');
+
+    try{
+      const { data, error } = await client.auth.signInWithPassword({
+        email: cleanEmail,
+        password: password
+      });
+
+      if(error){
+        showError(error.message || 'Login failed. Please check your email and password.');
+        return;
+      }
+
+      if(!data?.user || !allowed(data.user)){
+        await client.auth.signOut();
+        setLocked();
+        showError('Only @pw.live company accounts are allowed.');
+        return;
+      }
+
+      setUnlocked(data.user);
+      startPresence(data.user);
+    }catch(err){
+      console.error('Company email login error:', err);
+      showError('Login failed. Please try again.');
+    }finally{
+      loginBtn.disabled = false;
+    }
+  }
+
+  form?.addEventListener('submit', async (event)=>{
+    event.preventDefault();
+    await signInWithCompanyEmail(emailInput?.value, passwordInput?.value);
   });
 
-  client.auth.onAuthStateChange(async(event,session)=>{
+  client.auth.onAuthStateChange(async (event, session)=>{
     if(session?.user){
       if(!allowed(session.user)){
-        showError(`Only @${COMPANY_EMAIL_DOMAIN} company accounts are allowed.`);
-        await client.auth.signOut(); setLocked(); return;
+        await client.auth.signOut();
+        setLocked();
+        showError('Only @pw.live company accounts are allowed.');
+        return;
       }
+
       setUnlocked(session.user);
       startPresence(session.user);
     }else{
@@ -3050,23 +3121,49 @@ try {
 
   client.auth.getSession().then(({data})=>{
     if(data.session?.user && allowed(data.session.user)){
-      setUnlocked(data.session.user); startPresence(data.session.user);
+      setUnlocked(data.session.user);
+      startPresence(data.session.user);
     }else if(data.session?.user){
-      client.auth.signOut(); setLocked();
-    }else setLocked();
+      client.auth.signOut();
+      setLocked();
+      showError('Only @pw.live company accounts are allowed.');
+    }else{
+      setLocked();
+    }
   });
 
   function startPresence(user){
-    const countEl=document.getElementById('liveUsersCount'); if(!countEl)return;
-    const sessionId='session-'+(user.id||'user')+'-'+Date.now()+'-'+Math.random().toString(36).slice(2);
-    const channel=client.channel('pw-master-dashboard-live-users',{config:{presence:{key:sessionId}}});
-    const render=()=>{countEl.textContent=String(Object.keys(channel.presenceState()).length);};
-    channel.on('presence',{event:'sync'},render).on('presence',{event:'join'},render).on('presence',{event:'leave'},render).subscribe(async status=>{
-      if(status==='SUBSCRIBED'){
-        await channel.track({page:'PW Master Dashboard',email:user.email,connected_at:new Date().toISOString()});
-        render();
-      }
-    });
+    const countEl = document.getElementById('liveUsersCount');
+    if(!countEl) return;
+
+    const sessionId =
+      'session-' + (user.id || 'user') + '-' + Date.now() + '-' +
+      Math.random().toString(36).slice(2);
+
+    const channel = client.channel(
+      'pw-master-dashboard-live-users',
+      {config:{presence:{key:sessionId}}}
+    );
+
+    const render = ()=>{
+      countEl.textContent =
+        String(Object.keys(channel.presenceState()).length);
+    };
+
+    channel
+      .on('presence',{event:'sync'},render)
+      .on('presence',{event:'join'},render)
+      .on('presence',{event:'leave'},render)
+      .subscribe(async status=>{
+        if(status === 'SUBSCRIBED'){
+          await channel.track({
+            page:'PW Master Dashboard',
+            email:user.email,
+            connected_at:new Date().toISOString()
+          });
+          render();
+        }
+      });
   }
 })();
 </script>
