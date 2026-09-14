@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PW - Live Offroll Attendance Portal</title>
+<title>PW - Offroll Attendance Portal</title>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <style>
 *{box-sizing:border-box}
@@ -72,10 +72,13 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
 
   <div id="offrollViewLogin" class="offroll-login-card">
     <h2>Employee Login</h2>
-    <p class="login-note">Apni attendance dekhne ke liye <b>Emp ID</b> enter karein.</p>
+    <p class="login-note">Apni attendance dekhne ke liye <b>Mobile Number</b> aur <b>DOJ</b> enter karein.</p>
     <form class="offroll-login-form" onsubmit="event.preventDefault(); offrollViewLoginSubmit();">
-      <label>Emp ID
-        <input id="offrollLoginEmpId" type="text" placeholder="e.g. V3494250704" required>
+      <label>Mobile Number
+        <input id="offrollLoginMobile" type="text" placeholder="e.g. 9891821381" required>
+      </label>
+      <label>Password (DOJ)
+        <input id="offrollLoginDoj" type="text" placeholder="e.g. 17-Dec-2025" required>
       </label>
       <button type="submit">View Attendance</button>
     </form>
@@ -124,7 +127,6 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
 </main>
 
 <script>
-// Live Google Sheet URL Linked Here
 const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSUaqawRHr-P4V8RZNh5_wuMBKipgIKf2tN1Pzsd4IXjPNqinGgGC9sTSpam4JU4vB_zlcy06b8LORa/pub?gid=642260073&single=true&output=csv";
 
 let parsedData = [];
@@ -145,44 +147,57 @@ function fetchSheetData() {
   });
 }
 
-// Auto Fetch when page loads
 window.onload = fetchSheetData;
 
+// Standardize text comparison by removing spaces and making lowercase
+function cleanStr(str) {
+  return String(str || "").replace(/\s+/g, "").toLowerCase();
+}
+
 function offrollViewLoginSubmit(){
-  const searchEmpId = document.getElementById("offrollLoginEmpId").value.trim().toUpperCase();
-  if(!searchEmpId) return;
+  const searchMobile = cleanStr(document.getElementById("offrollLoginMobile").value);
+  const searchDoj = cleanStr(document.getElementById("offrollLoginDoj").value);
+
+  if(!searchMobile || !searchDoj) return;
 
   if(parsedData.length === 0){
-    alert("Data load hone me 2 second lag rahe hain. Kripya firse click karein!");
+    alert("Data load hone me 2 second lag rahe hain. Kripya firse try karein!");
     return;
   }
 
   let empRow = null;
   let headerRow = null;
 
-  // Search Row for Emp ID and Date Headers
+  // Header row identification for dates (Starts at Column L / Index 11)
   for(let i=0; i<parsedData.length; i++){
-    if(parsedData[i] && parsedData[i][1] && String(parsedData[i][1]).trim() === "Emp ID"){
+    if(parsedData[i] && cleanStr(parsedData[i][1]) === "empid"){
       headerRow = parsedData[i];
+      break;
     }
   }
 
   if(!headerRow) headerRow = parsedData[1] || parsedData[0];
 
+  // Mobile (Column H / Index 7) and DOJ (Column G / Index 6) Match
   for(let i=0; i<parsedData.length; i++){
     let row = parsedData[i];
-    if(row && row[1] && String(row[1]).trim().toUpperCase() === searchEmpId){
-      empRow = row;
-      break;
+    if(row && row.length > 7){
+      let rowMobile = cleanStr(row[7]);
+      let rowDoj = cleanStr(row[6]);
+
+      if(rowMobile === searchMobile && rowDoj === searchDoj){
+        empRow = row;
+        break;
+      }
     }
   }
 
   if(!empRow){
-    alert("Emp ID Google Sheet mein nahi mila! Kripya sahi Emp ID enter karein.");
+    alert("Mobile Number ya DOJ galat hai! Kripya Google Sheet ke mutabiq sahi details enter karein.");
     return;
   }
 
-  // Set Profile Information
+  // Display User Profile Details
   document.getElementById("dispEmpId").textContent = empRow[1] || "-";
   document.getElementById("dispEmpName").textContent = empRow[2] || "-";
   document.getElementById("dispDept").textContent = empRow[4] || "-";
@@ -191,21 +206,23 @@ function offrollViewLoginSubmit(){
   let tbodyHtml = "";
   let totalDays = 0, pCount = 0, nCount = 0, lCount = 0;
 
-  // Dates read starting from Column P (Index 15)
-  for(let col = 15; col < empRow.length; col++){
+  // Attendance Dates start from Index 11 (Column L - 26-July) onwards
+  for(let col = 11; col < empRow.length; col++){
     let dateStr = headerRow[col] ? headerRow[col].trim() : "";
     let statusVal = empRow[col] ? String(empRow[col]).trim() : "";
 
     if(dateStr && statusVal){
       totalDays++;
       let statusClass = "";
-      if(statusVal === "P"){ pCount++; statusClass = "status-P"; }
-      else if(statusVal === "N"){ nCount++; statusClass = "status-N"; }
-      else if(statusVal === "L"){ lCount++; statusClass = "status-L"; }
+      let upperStatus = statusVal.toUpperCase();
+
+      if(upperStatus === "P"){ pCount++; statusClass = "status-P"; }
+      else if(upperStatus === "N"){ nCount++; statusClass = "status-N"; }
+      else if(upperStatus === "L"){ lCount++; statusClass = "status-L"; }
 
       tbodyHtml += `<tr>
         <td><b>${dateStr}</b></td>
-        <td class="${statusClass}">${statusVal === "P" ? "Present (P)" : statusVal === "N" ? "Absent (N)" : statusVal === "L" ? "Leave (L)" : statusVal}</td>
+        <td class="${statusClass}">${statusVal}</td>
       </tr>`;
     }
   }
@@ -223,7 +240,8 @@ function offrollViewLoginSubmit(){
 function offrollViewLogout(){
   document.getElementById("offrollViewLogin").style.display = "block";
   document.getElementById("offrollViewPrivate").classList.remove("show");
-  document.getElementById("offrollLoginEmpId").value = "";
+  document.getElementById("offrollLoginMobile").value = "";
+  document.getElementById("offrollLoginDoj").value = "";
 }
 </script>
 
