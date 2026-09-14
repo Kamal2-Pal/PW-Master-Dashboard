@@ -3,43 +3,33 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Offroll Attendance Portal</title>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<title>PW - Live Offroll Attendance Portal</title>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f3f5f7;color:#182230}
-
 .header{background:#151b23;color:#fff;padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:20px}
 .title{display:flex;align-items:center;gap:14px}
 .logo{width:42px;height:42px;border-radius:10px;background:#f57c00;display:grid;place-items:center;font-weight:900;color:#fff;font-size:20px}
 h1{font-size:22px;margin:0 0 4px}
 .sub{font-size:13px;color:#aeb9c6}
-
 .wrap{max-width:1200px;margin:auto;padding:20px}
 
-/* Login Card Styling */
-.offroll-login-card{max-width:450px;margin:50px auto;background:#fff;border:1px solid #e1e6eb;border-radius:14px;padding:28px;box-shadow:0 4px 16px #0000000d}
-.offroll-login-card h2{margin:0 0 8px;font-size:22px;color:#151b23}
-.login-note{font-size:13px;color:#6d7a88;margin:0 0 20px;line-height:1.5}
+.sync-status{background:#eef5ff;color:#175ea8;border:1px solid #d9e8fb;border-radius:10px;padding:12px 16px;font-size:13px;font-weight:700;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
+
+.offroll-login-card{max-width:450px;margin:30px auto;background:#fff;border:1px solid #e1e6eb;border-radius:14px;padding:28px;box-shadow:0 4px 16px #0000000d}
+.offroll-login-card h2{margin:0 0 8px;font-size:22px}
+.login-note{font-size:13px;color:#6d7a88;margin:0 0 20px}
 .offroll-login-form{display:grid;gap:16px}
 .offroll-login-form label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:#657281;font-weight:700;text-transform:uppercase}
-.offroll-login-form input{width:100%;min-width:0;padding:12px;border:1px solid #ccd5df;border-radius:8px;font-size:14px;outline:0}
-.offroll-login-form input:focus{border-color:#2d8cff}
+.offroll-login-form input{width:100%;padding:12px;border:1px solid #ccd5df;border-radius:8px;font-size:14px;outline:0}
 .offroll-login-form button{width:100%;margin-top:8px;background:#151b23;color:#fff;border:0;padding:12px;border-radius:8px;font-weight:700;font-size:15px;cursor:pointer}
 .offroll-login-form button:hover{background:#242c36}
-.offroll-login-error{display:none;background:#fff1f1;color:#b42323;border:1px solid #f2c4c4;border-radius:8px;padding:10px;font-size:12px;font-weight:700}
-.offroll-login-error.show{display:block}
 
-/* Private Dashboard View */
 .offroll-view-private{display:none}
 .offroll-view-private.show{display:block}
-
-.offroll-view-head{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:18px}
-.offroll-view-head h3{margin:0 0 4px;font-size:20px}
-.offroll-view-head p{margin:0;color:#66778a;font-size:13px}
-
-.logout-btn{border:1px solid #d4dbe3;background:#fff;padding:8px 16px;border-radius:8px;font-weight:700;cursor:pointer;color:#d32f2f;border-color:#f5c6cb}
-.logout-btn:hover{background:#fdf2f2}
+.offroll-view-head{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center}
+.logout-btn{border:1px solid #f5c6cb;background:#fff;padding:8px 16px;border-radius:8px;font-weight:700;cursor:pointer;color:#d32f2f}
 
 .offroll-view-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
 .offroll-view-kpi{background:#fff;border:1px solid #e3e8ee;border-radius:12px;padding:16px}
@@ -50,17 +40,15 @@ h1{font-size:22px;margin:0 0 4px}
 .offroll-view-employee-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 .offroll-view-employee-item{background:#f7f9fb;border-radius:8px;padding:10px}
 .offroll-view-employee-item small{display:block;color:#6b7785;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:5px}
-.offroll-view-employee-item b{font-size:14px}
 
-.table-card{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:18px;overflow:hidden}
-.table-wrap{overflow:auto;max-height:450px;border:1px solid #edf0f3;border-radius:8px}
+.table-card{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:18px}
+.table-wrap{overflow:auto;max-height:500px;border:1px solid #edf0f3;border-radius:8px}
 table{border-collapse:collapse;width:100%;font-size:13px}
 th,td{padding:10px 12px;border-bottom:1px solid #edf0f3;text-align:left;white-space:nowrap}
 th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transform:uppercase;color:#657281}
-
-@media(max-width:768px){
-  .offroll-view-kpis,.offroll-view-employee-grid{grid-template-columns:repeat(2,1fr)}
-}
+.status-P{color:#18753b;font-weight:700}
+.status-N{color:#d32f2f;font-weight:700}
+.status-L{color:#e2a400;font-weight:700}
 </style>
 </head>
 <body>
@@ -70,112 +58,172 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
     <div class="logo">P</div>
     <div>
       <h1>PW - Offroll Attendance Portal</h1>
-      <div class="sub">Employee Login & Attendance Details</div>
+      <div class="sub">Live Google Sheet Verification</div>
     </div>
  </div>
 </header>
 
 <main class="wrap">
 
-  <!-- Step 1: Login Form -->
+  <div class="sync-status">
+    <span id="syncText">🔗 Google Sheet se connect ho raha hai...</span>
+    <button onclick="fetchSheetData()" style="background:#fff;border:1px solid #ccd5df;padding:5px 10px;border-radius:6px;cursor:pointer;font-weight:700">🔄 Refresh Data</button>
+  </div>
+
   <div id="offrollViewLogin" class="offroll-login-card">
-    <h2>Offroll Employee Login</h2>
-    <p class="login-note">Apni attendance dekhne ke liye <b>Emp ID</b> aur <b>Password (DOJ)</b> enter karein.</p>
-    
-    <form id="offrollLoginForm" class="offroll-login-form" onsubmit="event.preventDefault(); offrollViewLoginSubmit();">
-      <label>Login ID (Emp ID)
-        <input id="offrollLoginEmpId" type="text" placeholder="e.g. PW1001" required>
+    <h2>Employee Login</h2>
+    <p class="login-note">Apni attendance dekhne ke liye <b>Emp ID</b> enter karein.</p>
+    <form class="offroll-login-form" onsubmit="event.preventDefault(); offrollViewLoginSubmit();">
+      <label>Emp ID
+        <input id="offrollLoginEmpId" type="text" placeholder="e.g. V3494250704" required>
       </label>
-      <label>Password (DOJ)
-        <input id="offrollLoginPassword" type="password" placeholder="DD/MM/YYYY" required>
-      </label>
-      <div id="offrollLoginError" class="offroll-login-error"></div>
-      <button type="submit">Login</button>
+      <button type="submit">View Attendance</button>
     </form>
   </div>
 
-  <!-- Step 2: Private Attendance View (Shown after login) -->
   <div id="offrollViewPrivate" class="offroll-view-private">
-    
     <div class="offroll-view-head">
       <div>
         <h3>My Attendance Dashboard</h3>
-        <p>Logged in User Attendance Record</p>
+        <p>Live Synced with Sheet Data</p>
       </div>
-      <button class="logout-btn" type="button" onclick="offrollViewLogout()">Logout</button>
+      <button class="logout-btn" onclick="offrollViewLogout()">Logout</button>
     </div>
 
-    <!-- Attendance Summary KPIs -->
     <div class="offroll-view-kpis">
-      <div class="offroll-view-kpi"><small>Total Days</small><strong id="kpiTotal">20</strong></div>
-      <div class="offroll-view-kpi"><small>Present Days</small><strong id="kpiPresent" style="color:#18753b">18</strong></div>
-      <div class="offroll-view-kpi"><small>Absent Days</small><strong id="kpiAbsent" style="color:#d32f2f">2</strong></div>
-      <div class="offroll-view-kpi"><small>Attendance %</small><strong id="kpiPct" style="color:#2d8cff">90%</strong></div>
+      <div class="offroll-view-kpi"><small>Total Days</small><strong id="kpiTotal">0</strong></div>
+      <div class="offroll-view-kpi"><small>Present (P)</small><strong id="kpiPresent" style="color:#18753b">0</strong></div>
+      <div class="offroll-view-kpi"><small>Absent (N)</small><strong id="kpiAbsent" style="color:#d32f2f">0</strong></div>
+      <div class="offroll-view-kpi"><small>Leave (L)</small><strong id="kpiLeave" style="color:#e2a400">0</strong></div>
     </div>
 
-    <!-- Employee Information -->
     <section class="offroll-view-employee">
-      <div class="offroll-view-employee-grid" id="offrollViewEmployee">
+      <div class="offroll-view-employee-grid">
         <div class="offroll-view-employee-item"><small>Emp ID</small><b id="dispEmpId">-</b></div>
-        <div class="offroll-view-employee-item"><small>Employee Name</small><b id="dispEmpName">Offroll Staff</b></div>
-        <div class="offroll-view-employee-item"><small>Department</small><b>Warehouse Operations</b></div>
-        <div class="offroll-view-employee-item"><small>Status</small><b style="color:#18753b">Active</b></div>
+        <div class="offroll-view-employee-item"><small>Employee Name</small><b id="dispEmpName">-</b></div>
+        <div class="offroll-view-employee-item"><small>Department</small><b id="dispDept">-</b></div>
+        <div class="offroll-view-employee-item"><small>Designation</small><b id="dispDesig">-</b></div>
       </div>
     </section>
 
-    <!-- Attendance Details Table -->
     <section class="table-card">
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
               <th>Date</th>
-              <th>Shift</th>
-              <th>In Time</th>
-              <th>Out Time</th>
-              <th>Total Hours</th>
               <th>Status</th>
             </tr>
           </thead>
-          <tbody id="attendanceTbody">
-            <tr><td>01/09/2026</td><td>General</td><td>09:00 AM</td><td>06:00 PM</td><td>9 hrs</td><td style="color:#18753b;font-weight:700">Present</td></tr>
-            <tr><td>02/09/2026</td><td>General</td><td>09:05 AM</td><td>06:02 PM</td><td>9 hrs</td><td style="color:#18753b;font-weight:700">Present</td></tr>
-            <tr><td>03/09/2026</td><td>General</td><td>-</td><td>-</td><td>0 hrs</td><td style="color:#d32f2f;font-weight:700">Absent</td></tr>
-          </tbody>
+          <tbody id="attendanceTbody"></tbody>
         </table>
       </div>
     </section>
-
   </div>
 
 </main>
 
 <script>
-function offrollViewLoginSubmit(){
-  const empId = document.getElementById("offrollLoginEmpId").value.trim();
-  const pass = document.getElementById("offrollLoginPassword").value.trim();
-  const errorEl = document.getElementById("offrollLoginError");
+// Live Google Sheet URL Linked Here
+const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSUaqawRHr-P4V8RZNh5_wuMBKipgIKf2tN1Pzsd4IXjPNqinGgGC9sTSpam4JU4vB_zlcy06b8LORa/pub?gid=642260073&single=true&output=csv";
 
-  if(empId && pass){
-    errorEl.classList.remove("show");
-    
-    // Display dashboard
-    document.getElementById("offrollViewLogin").style.display = "none";
-    document.getElementById("offrollViewPrivate").classList.add("show");
-    
-    // Populate employee ID
-    document.getElementById("dispEmpId").textContent = empId;
-  } else {
-    errorEl.textContent = "Kripya valid Emp ID aur Password enter karein.";
-    errorEl.classList.add("show");
+let parsedData = [];
+
+function fetchSheetData() {
+  const syncText = document.getElementById("syncText");
+  syncText.textContent = "🔄 Fetching latest data from Google Sheet...";
+
+  Papa.parse(GOOGLE_SHEET_CSV_URL, {
+    download: true,
+    complete: function(results) {
+      parsedData = results.data;
+      syncText.innerHTML = "🟢 <b>Live Connected:</b> Google Sheet ka Live Data Synced hai!";
+    },
+    error: function(err) {
+      syncText.textContent = "❌ Sheet load nahi ho payi. Kripya page refresh karein.";
+    }
+  });
+}
+
+// Auto Fetch when page loads
+window.onload = fetchSheetData;
+
+function offrollViewLoginSubmit(){
+  const searchEmpId = document.getElementById("offrollLoginEmpId").value.trim().toUpperCase();
+  if(!searchEmpId) return;
+
+  if(parsedData.length === 0){
+    alert("Data load hone me 2 second lag rahe hain. Kripya firse click karein!");
+    return;
   }
+
+  let empRow = null;
+  let headerRow = null;
+
+  // Search Row for Emp ID and Date Headers
+  for(let i=0; i<parsedData.length; i++){
+    if(parsedData[i] && parsedData[i][1] && String(parsedData[i][1]).trim() === "Emp ID"){
+      headerRow = parsedData[i];
+    }
+  }
+
+  if(!headerRow) headerRow = parsedData[1] || parsedData[0];
+
+  for(let i=0; i<parsedData.length; i++){
+    let row = parsedData[i];
+    if(row && row[1] && String(row[1]).trim().toUpperCase() === searchEmpId){
+      empRow = row;
+      break;
+    }
+  }
+
+  if(!empRow){
+    alert("Emp ID Google Sheet mein nahi mila! Kripya sahi Emp ID enter karein.");
+    return;
+  }
+
+  // Set Profile Information
+  document.getElementById("dispEmpId").textContent = empRow[1] || "-";
+  document.getElementById("dispEmpName").textContent = empRow[2] || "-";
+  document.getElementById("dispDept").textContent = empRow[4] || "-";
+  document.getElementById("dispDesig").textContent = empRow[5] || "-";
+
+  let tbodyHtml = "";
+  let totalDays = 0, pCount = 0, nCount = 0, lCount = 0;
+
+  // Dates read starting from Column P (Index 15)
+  for(let col = 15; col < empRow.length; col++){
+    let dateStr = headerRow[col] ? headerRow[col].trim() : "";
+    let statusVal = empRow[col] ? String(empRow[col]).trim() : "";
+
+    if(dateStr && statusVal){
+      totalDays++;
+      let statusClass = "";
+      if(statusVal === "P"){ pCount++; statusClass = "status-P"; }
+      else if(statusVal === "N"){ nCount++; statusClass = "status-N"; }
+      else if(statusVal === "L"){ lCount++; statusClass = "status-L"; }
+
+      tbodyHtml += `<tr>
+        <td><b>${dateStr}</b></td>
+        <td class="${statusClass}">${statusVal === "P" ? "Present (P)" : statusVal === "N" ? "Absent (N)" : statusVal === "L" ? "Leave (L)" : statusVal}</td>
+      </tr>`;
+    }
+  }
+
+  document.getElementById("attendanceTbody").innerHTML = tbodyHtml;
+  document.getElementById("kpiTotal").textContent = totalDays;
+  document.getElementById("kpiPresent").textContent = pCount;
+  document.getElementById("kpiAbsent").textContent = nCount;
+  document.getElementById("kpiLeave").textContent = lCount;
+
+  document.getElementById("offrollViewLogin").style.display = "none";
+  document.getElementById("offrollViewPrivate").classList.add("show");
 }
 
 function offrollViewLogout(){
   document.getElementById("offrollViewLogin").style.display = "block";
   document.getElementById("offrollViewPrivate").classList.remove("show");
   document.getElementById("offrollLoginEmpId").value = "";
-  document.getElementById("offrollLoginPassword").value = "";
 }
 </script>
 
