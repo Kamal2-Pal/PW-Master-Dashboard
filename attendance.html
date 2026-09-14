@@ -1,179 +1,183 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PW- Master Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        body {
-            background-color: #0f172a;
-            color: #f8fafc;
-            font-family: 'Inter', sans-serif;
-        }
-        .glass-card {
-            background: rgba(30, 41, 59, 0.7);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offroll Attendance Portal</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f3f5f7;color:#182230}
+
+.header{background:#151b23;color:#fff;padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.title{display:flex;align-items:center;gap:14px}
+.logo{width:42px;height:42px;border-radius:10px;background:#f57c00;display:grid;place-items:center;font-weight:900;color:#fff;font-size:20px}
+h1{font-size:22px;margin:0 0 4px}
+.sub{font-size:13px;color:#aeb9c6}
+
+.wrap{max-width:1200px;margin:auto;padding:20px}
+
+/* Login Card Styling */
+.offroll-login-card{max-width:450px;margin:50px auto;background:#fff;border:1px solid #e1e6eb;border-radius:14px;padding:28px;box-shadow:0 4px 16px #0000000d}
+.offroll-login-card h2{margin:0 0 8px;font-size:22px;color:#151b23}
+.login-note{font-size:13px;color:#6d7a88;margin:0 0 20px;line-height:1.5}
+.offroll-login-form{display:grid;gap:16px}
+.offroll-login-form label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:#657281;font-weight:700;text-transform:uppercase}
+.offroll-login-form input{width:100%;min-width:0;padding:12px;border:1px solid #ccd5df;border-radius:8px;font-size:14px;outline:0}
+.offroll-login-form input:focus{border-color:#2d8cff}
+.offroll-login-form button{width:100%;margin-top:8px;background:#151b23;color:#fff;border:0;padding:12px;border-radius:8px;font-weight:700;font-size:15px;cursor:pointer}
+.offroll-login-form button:hover{background:#242c36}
+.offroll-login-error{display:none;background:#fff1f1;color:#b42323;border:1px solid #f2c4c4;border-radius:8px;padding:10px;font-size:12px;font-weight:700}
+.offroll-login-error.show{display:block}
+
+/* Private Dashboard View */
+.offroll-view-private{display:none}
+.offroll-view-private.show{display:block}
+
+.offroll-view-head{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:18px}
+.offroll-view-head h3{margin:0 0 4px;font-size:20px}
+.offroll-view-head p{margin:0;color:#66778a;font-size:13px}
+
+.logout-btn{border:1px solid #d4dbe3;background:#fff;padding:8px 16px;border-radius:8px;font-weight:700;cursor:pointer;color:#d32f2f;border-color:#f5c6cb}
+.logout-btn:hover{background:#fdf2f2}
+
+.offroll-view-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.offroll-view-kpi{background:#fff;border:1px solid #e3e8ee;border-radius:12px;padding:16px}
+.offroll-view-kpi small{color:#6b7785;text-transform:uppercase;font-weight:700;font-size:11px}
+.offroll-view-kpi strong{display:block;font-size:24px;margin-top:8px}
+
+.offroll-view-employee{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:18px;margin-bottom:16px}
+.offroll-view-employee-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.offroll-view-employee-item{background:#f7f9fb;border-radius:8px;padding:10px}
+.offroll-view-employee-item small{display:block;color:#6b7785;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:5px}
+.offroll-view-employee-item b{font-size:14px}
+
+.table-card{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:18px;overflow:hidden}
+.table-wrap{overflow:auto;max-height:450px;border:1px solid #edf0f3;border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:10px 12px;border-bottom:1px solid #edf0f3;text-align:left;white-space:nowrap}
+th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transform:uppercase;color:#657281}
+
+@media(max-width:768px){
+  .offroll-view-kpis,.offroll-view-employee-grid{grid-template-columns:repeat(2,1fr)}
+}
+</style>
 </head>
-<body class="min-h-screen">
+<body>
 
-    <!-- MAIN DASHBOARD APP CONTAINER (Direct Visible) -->
-    <div id="appContainer" class="p-6 max-w-7xl mx-auto space-y-6">
-        
-        <!-- Header -->
-        <header class="flex justify-between items-center bg-slate-800 p-4 rounded-xl border border-slate-700">
-            <div class="flex items-center gap-3">
-                <div class="bg-orange-500 text-white font-bold text-xl w-10 h-10 rounded-lg flex items-center justify-center">
-                    V
-                </div>
-                <div>
-                    <h1 class="text-xl font-bold text-white">PW- Master Dashboard</h1>
-                    <p class="text-xs text-slate-400">Attendance & Analytics Portal</p>
-                </div>
-            </div>
-            <div class="flex items-center gap-3">
-                <span class="text-sm text-slate-300"><i class="fa-solid fa-user-check text-green-400 mr-2"></i>Active Session</span>
-            </div>
-        </header>
+<header class="header">
+ <div class="title">
+    <div class="logo">P</div>
+    <div>
+      <h1>PW - Offroll Attendance Portal</h1>
+      <div class="sub">Employee Login & Attendance Details</div>
+    </div>
+ </div>
+</header>
 
-        <!-- KPI Metrics Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div class="glass-card p-4 rounded-xl">
-                <p class="text-slate-400 text-sm">Total Strength</p>
-                <h3 class="text-2xl font-bold text-white mt-1" id="totalEmployees">1,250</h3>
-                <span class="text-xs text-green-400">100% On-boarded</span>
-            </div>
-            <div class="glass-card p-4 rounded-xl">
-                <p class="text-slate-400 text-sm">Present Today</p>
-                <h3 class="text-2xl font-bold text-green-400 mt-1" id="presentToday">1,120</h3>
-                <span class="text-xs text-slate-400">89.6% Attendance</span>
-            </div>
-            <div class="glass-card p-4 rounded-xl">
-                <p class="text-slate-400 text-sm">Absent / On Leave</p>
-                <h3 class="text-2xl font-bold text-red-400 mt-1" id="absentToday">130</h3>
-                <span class="text-xs text-red-400">10.4% Absenteeism</span>
-            </div>
-            <div class="glass-card p-4 rounded-xl">
-                <p class="text-slate-400 text-sm">Late Arrivals</p>
-                <h3 class="text-2xl font-bold text-yellow-400 mt-1" id="lateToday">42</h3>
-                <span class="text-xs text-yellow-400">Requires Review</span>
-            </div>
-        </div>
+<main class="wrap">
 
-        <!-- Charts Section -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div class="glass-card p-5 rounded-xl">
-                <h2 class="text-lg font-semibold text-white mb-4">Weekly Attendance Trend</h2>
-                <canvas id="attendanceChart" class="w-full h-64"></canvas>
-            </div>
-            <div class="glass-card p-5 rounded-xl">
-                <h2 class="text-lg font-semibold text-white mb-4">Department-wise Breakdown</h2>
-                <canvas id="departmentChart" class="w-full h-64"></canvas>
-            </div>
-        </div>
+  <!-- Step 1: Login Form -->
+  <div id="offrollViewLogin" class="offroll-login-card">
+    <h2>Offroll Employee Login</h2>
+    <p class="login-note">Apni attendance dekhne ke liye <b>Emp ID</b> aur <b>Password (DOJ)</b> enter karein.</p>
+    
+    <form id="offrollLoginForm" class="offroll-login-form" onsubmit="event.preventDefault(); offrollViewLoginSubmit();">
+      <label>Login ID (Emp ID)
+        <input id="offrollLoginEmpId" type="text" placeholder="e.g. PW1001" required>
+      </label>
+      <label>Password (DOJ)
+        <input id="offrollLoginPassword" type="password" placeholder="DD/MM/YYYY" required>
+      </label>
+      <div id="offrollLoginError" class="offroll-login-error"></div>
+      <button type="submit">Login</button>
+    </form>
+  </div>
 
-        <!-- Attendance Records Table -->
-        <div class="glass-card rounded-xl overflow-hidden">
-            <div class="p-4 border-b border-slate-700 flex justify-between items-center">
-                <h2 class="text-lg font-semibold text-white">Recent Attendance Logs</h2>
-                <input type="text" id="searchInput" placeholder="Search employee..." class="bg-slate-900 border border-slate-700 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-orange-500">
-            </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm text-slate-300">
-                    <thead class="bg-slate-800 text-slate-400 text-xs uppercase border-b border-slate-700">
-                        <tr>
-                            <th class="p-3">Employee ID</th>
-                            <th class="p-3">Name</th>
-                            <th class="p-3">Department</th>
-                            <th class="p-3">Check-In</th>
-                            <th class="p-3">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="attendanceTableBody">
-                        <tr class="border-b border-slate-800 hover:bg-slate-800/50">
-                            <td class="p-3 font-mono text-slate-400">PW-101</td>
-                            <td class="p-3 font-medium text-white">Rahul Sharma</td>
-                            <td class="p-3">Operations</td>
-                            <td class="p-3">09:15 AM</td>
-                            <td class="p-3"><span class="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded-full">Present</span></td>
-                        </tr>
-                        <tr class="border-b border-slate-800 hover:bg-slate-800/50">
-                            <td class="p-3 font-mono text-slate-400">PW-102</td>
-                            <td class="p-3 font-medium text-white">Priya Verma</td>
-                            <td class="p-3">Academics</td>
-                            <td class="p-3">09:42 AM</td>
-                            <td class="p-3"><span class="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs rounded-full">Late</span></td>
-                        </tr>
-                        <tr class="border-b border-slate-800 hover:bg-slate-800/50">
-                            <td class="p-3 font-mono text-slate-400">PW-103</td>
-                            <td class="p-3 font-medium text-white">Aman Gupta</td>
-                            <td class="p-3">IT Support</td>
-                            <td class="p-3">-- : --</td>
-                            <td class="p-3"><span class="px-2 py-1 bg-red-500/20 text-red-400 text-xs rounded-full">Absent</span></td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
+  <!-- Step 2: Private Attendance View (Shown after login) -->
+  <div id="offrollViewPrivate" class="offroll-view-private">
+    
+    <div class="offroll-view-head">
+      <div>
+        <h3>My Attendance Dashboard</h3>
+        <p>Logged in User Attendance Record</p>
+      </div>
+      <button class="logout-btn" type="button" onclick="offrollViewLogout()">Logout</button>
     </div>
 
-    <!-- JavaScript Logic -->
-    <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            initCharts();
-        });
+    <!-- Attendance Summary KPIs -->
+    <div class="offroll-view-kpis">
+      <div class="offroll-view-kpi"><small>Total Days</small><strong id="kpiTotal">20</strong></div>
+      <div class="offroll-view-kpi"><small>Present Days</small><strong id="kpiPresent" style="color:#18753b">18</strong></div>
+      <div class="offroll-view-kpi"><small>Absent Days</small><strong id="kpiAbsent" style="color:#d32f2f">2</strong></div>
+      <div class="offroll-view-kpi"><small>Attendance %</small><strong id="kpiPct" style="color:#2d8cff">90%</strong></div>
+    </div>
 
-        function initCharts() {
-            // Weekly Trend Chart
-            const ctx1 = document.getElementById('attendanceChart').getContext('2d');
-            new Chart(ctx1, {
-                type: 'line',
-                data: {
-                    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-                    datasets: [{
-                        label: 'Present %',
-                        data: [92, 88, 94, 89, 90, 85],
-                        borderColor: '#f97316',
-                        backgroundColor: 'rgba(249, 115, 22, 0.1)',
-                        fill: true,
-                        tension: 0.4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
-                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } }
-                    }
-                }
-            });
+    <!-- Employee Information -->
+    <section class="offroll-view-employee">
+      <div class="offroll-view-employee-grid" id="offrollViewEmployee">
+        <div class="offroll-view-employee-item"><small>Emp ID</small><b id="dispEmpId">-</b></div>
+        <div class="offroll-view-employee-item"><small>Employee Name</small><b id="dispEmpName">Offroll Staff</b></div>
+        <div class="offroll-view-employee-item"><small>Department</small><b>Warehouse Operations</b></div>
+        <div class="offroll-view-employee-item"><small>Status</small><b style="color:#18753b">Active</b></div>
+      </div>
+    </section>
 
-            // Department Breakdown Chart
-            const ctx2 = document.getElementById('departmentChart').getContext('2d');
-            new Chart(ctx2, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Academics', 'Operations', 'Tech/IT', 'Sales'],
-                    datasets: [{
-                        data: [450, 300, 200, 300],
-                        backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6']
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: { position: 'bottom', labels: { color: '#94a3b8' } }
-                    }
-                }
-            });
-        }
-    </script>
+    <!-- Attendance Details Table -->
+    <section class="table-card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Shift</th>
+              <th>In Time</th>
+              <th>Out Time</th>
+              <th>Total Hours</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="attendanceTbody">
+            <tr><td>01/09/2026</td><td>General</td><td>09:00 AM</td><td>06:00 PM</td><td>9 hrs</td><td style="color:#18753b;font-weight:700">Present</td></tr>
+            <tr><td>02/09/2026</td><td>General</td><td>09:05 AM</td><td>06:02 PM</td><td>9 hrs</td><td style="color:#18753b;font-weight:700">Present</td></tr>
+            <tr><td>03/09/2026</td><td>General</td><td>-</td><td>-</td><td>0 hrs</td><td style="color:#d32f2f;font-weight:700">Absent</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </div>
+
+</main>
+
+<script>
+function offrollViewLoginSubmit(){
+  const empId = document.getElementById("offrollLoginEmpId").value.trim();
+  const pass = document.getElementById("offrollLoginPassword").value.trim();
+  const errorEl = document.getElementById("offrollLoginError");
+
+  if(empId && pass){
+    errorEl.classList.remove("show");
+    
+    // Display dashboard
+    document.getElementById("offrollViewLogin").style.display = "none";
+    document.getElementById("offrollViewPrivate").classList.add("show");
+    
+    // Populate employee ID
+    document.getElementById("dispEmpId").textContent = empId;
+  } else {
+    errorEl.textContent = "Kripya valid Emp ID aur Password enter karein.";
+    errorEl.classList.add("show");
+  }
+}
+
+function offrollViewLogout(){
+  document.getElementById("offrollViewLogin").style.display = "block";
+  document.getElementById("offrollViewPrivate").classList.remove("show");
+  document.getElementById("offrollLoginEmpId").value = "";
+  document.getElementById("offrollLoginPassword").value = "";
+}
+</script>
+
 </body>
 </html>
