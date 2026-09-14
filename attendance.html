@@ -17,16 +17,14 @@ h1{font-size:22px;margin:0 0 4px}
 
 .sync-status{background:#eef5ff;color:#175ea8;border:1px solid #d9e8fb;border-radius:10px;padding:12px 16px;font-size:13px;font-weight:700;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
 
-.offroll-login-card{max-width:450px;margin:30px auto;background:#fff;border:1px solid #e1e6eb;border-radius:14px;padding:28px;box-shadow:0 4px 16px #0000000d}
+.offroll-login-card{max-width:420px;margin:40px auto;background:#fff;border:1px solid #e1e6eb;border-radius:14px;padding:28px;box-shadow:0 4px 16px #0000000d}
 .offroll-login-card h2{margin:0 0 8px;font-size:22px}
 .login-note{font-size:13px;color:#6d7a88;margin:0 0 20px}
 .offroll-login-form{display:grid;gap:16px}
 .offroll-login-form label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:#657281;font-weight:700;text-transform:uppercase}
 .offroll-login-form input{width:100%;padding:12px;border:1px solid #ccd5df;border-radius:8px;font-size:14px;outline:0}
-.offroll-login-form button{width:100%;margin-top:8px;background:#25d366;color:#fff;border:0;padding:12px;border-radius:8px;font-weight:700;font-size:15px;cursor:pointer}
-.offroll-login-form button:hover{background:#1eb857}
-
-.otp-box{display:none;background:#eefbe7;border:1px solid #c3e6cb;padding:12px;border-radius:8px;color:#155724;font-size:13px;margin-top:5px;text-align:center}
+.offroll-login-form button{width:100%;margin-top:8px;background:#151b23;color:#fff;border:0;padding:12px;border-radius:8px;font-weight:700;font-size:15px;cursor:pointer}
+.offroll-login-form button:hover{background:#2b3440}
 
 .offroll-view-private{display:none}
 .offroll-view-private.show{display:block}
@@ -65,7 +63,7 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
     <div class="logo">P</div>
     <div>
       <h1>PW - Offroll Attendance Portal</h1>
-      <div class="sub">Free WhatsApp OTP Verification</div>
+      <div class="sub">Emp ID & Password Login</div>
     </div>
  </div>
 </header>
@@ -79,23 +77,18 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
 
   <div id="offrollViewLogin" class="offroll-login-card">
     <h2>Employee Login</h2>
-    <p class="login-note">Apna registered <b>Mobile Number</b> enter karke Verification Code mangwayein.</p>
+    <p class="login-note">Apna <b>Emp ID</b> (User ID) aur <b>Employee Name</b> (Password) enter karein.</p>
     
-    <form class="offroll-login-form" onsubmit="event.preventDefault(); verifyOtpAndLogin();">
-      <label>Mobile Number
-        <div style="display:flex;gap:8px">
-          <input id="offrollLoginMobile" type="text" placeholder="e.g. 9837105212" required>
-          <button type="button" onclick="sendWhatsappVerification()" style="width:170px;margin:0;font-size:12px">📲 Get Code on WA</button>
-        </div>
+    <form class="offroll-login-form" onsubmit="event.preventDefault(); verifyUserAndLogin();">
+      <label>User ID (Emp ID)
+        <input id="loginEmpId" type="text" placeholder="e.g. A0814120404" required>
       </label>
 
-      <div id="otpNotice" class="otp-box"></div>
-
-      <label id="otpField" style="display:none">Enter 4-Digit Code
-        <input id="offrollLoginOtp" type="text" placeholder="Enter code received on WhatsApp">
+      <label>Password (Employee Name)
+        <input id="loginEmpName" type="password" placeholder="e.g. Jagat Pal" required>
       </label>
 
-      <button id="loginBtn" type="submit" style="display:none;background:#151b23">Verify Code & View Attendance</button>
+      <button type="submit">Login to Dashboard</button>
     </form>
   </div>
 
@@ -103,7 +96,7 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
     <div class="offroll-view-head">
       <div>
         <h3>My Attendance Dashboard</h3>
-        <p>Verified via WhatsApp OTP</p>
+        <p>Verified Credentials</p>
       </div>
       <button class="logout-btn" onclick="offrollViewLogout()">Logout</button>
     </div>
@@ -146,12 +139,7 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
 <script>
 const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSUaqawRHr-P4V8RZNh5_wuMBKipgIKf2tN1Pzsd4IXjPNqinGgGC9sTSpam4JU4vB_zlcy06b8LORa/pub?gid=642260073&single=true&output=csv";
 
-// Apna Admin/HR WhatsApp number yahan enter karein (With Country Code '91')
-const ADMIN_WHATSAPP_NUMBER = "919837105212"; 
-
 let parsedData = [];
-let generatedOtp = null;
-let matchedEmpRow = null;
 
 function fetchSheetData() {
   const syncText = document.getElementById("syncText");
@@ -171,58 +159,8 @@ function fetchSheetData() {
 
 window.onload = fetchSheetData;
 
-function cleanStr(str) {
-  return String(str || "").replace(/\D/g, "");
-}
-
-function sendWhatsappVerification() {
-  const inputMobile = cleanStr(document.getElementById("offrollLoginMobile").value);
-  if(!inputMobile || inputMobile.length < 8) {
-    alert("Kripya sahi Mobile Number enter karein!");
-    return;
-  }
-
-  if(parsedData.length === 0){
-    alert("Data load ho raha hai, kripya Refresh Data par click karke try karein.");
-    return;
-  }
-
-  matchedEmpRow = null;
-  for(let i=0; i<parsedData.length; i++){
-    let row = parsedData[i];
-    if(row && row.length > 2){
-      for(let c=0; c<row.length; c++){
-        if(cleanStr(row[c]) === inputMobile){
-          matchedEmpRow = row;
-          break;
-        }
-      }
-      if(matchedEmpRow) break;
-    }
-  }
-
-  if(!matchedEmpRow) {
-    alert("Ye Mobile Number Google Sheet me nahi mila!");
-    return;
-  }
-
-  // Generate 4-digit code
-  generatedOtp = Math.floor(1000 + Math.random() * 9000);
-  let empName = matchedEmpRow[2] || "Employee";
-
-  // Text message to be sent via WhatsApp
-  let waText = encodeURIComponent(`Hello Admin, Main PW Attendance Login ke liye verification code request kar raha hu.\n\nName: ${empName}\nMobile: ${inputMobile}\nLogin Code: ${generatedOtp}`);
-
-  // Redirect to WhatsApp Deep Link
-  let waUrl = `https://wa.me/${ADMIN_WHATSAPP_NUMBER}?text=${waText}`;
-  window.open(waUrl, "_blank");
-
-  const otpNotice = document.getElementById("otpNotice");
-  otpNotice.style.display = "block";
-  otpNotice.innerHTML = `📲 <b>WhatsApp Open Ho Gaya Hai!</b><br>Message Send karne ke baad wahan dikha code <b>(${generatedOtp})</b> yahan enter karein.`;
-
-  document.getElementById("otpField").style.display = "flex";
-  document.getElementById("loginBtn").style.display = "block";
+function cleanString(str) {
+  return String(str || "").trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 function parseSheetDate(dateStr) {
@@ -248,11 +186,38 @@ function parseSheetDate(dateStr) {
   return new Date(now.getFullYear(), month, day, 23, 59, 59);
 }
 
-function verifyOtpAndLogin() {
-  const userOtp = document.getElementById("offrollLoginOtp").value.trim();
+function verifyUserAndLogin() {
+  const inputEmpId = cleanString(document.getElementById("loginEmpId").value);
+  const inputEmpName = cleanString(document.getElementById("loginEmpName").value);
 
-  if(userOtp !== String(generatedOtp)) {
-    alert("Galat Code! Kripya sahi 4-digit verification code enter karein.");
+  if(!inputEmpId || !inputEmpName) {
+    alert("Kripya Emp ID aur Employee Name dono enter karein!");
+    return;
+  }
+
+  if(parsedData.length === 0){
+    alert("Data load ho raha hai, kripya Refresh Data par click karke try karein.");
+    return;
+  }
+
+  let matchedEmpRow = null;
+
+  // Search row matching both Emp ID (Col B / Index 1) and Name (Col C / Index 2)
+  for(let i=0; i<parsedData.length; i++){
+    let row = parsedData[i];
+    if(row && row.length > 2){
+      let sheetEmpId = cleanString(row[1]);
+      let sheetEmpName = cleanString(row[2]);
+
+      if(sheetEmpId === inputEmpId && sheetEmpName === inputEmpName){
+        matchedEmpRow = row;
+        break;
+      }
+    }
+  }
+
+  if(!matchedEmpRow) {
+    alert("Invalid Credentials! User ID (Emp ID) ya Password (Name) sahi nahi hai.");
     return;
   }
 
@@ -327,11 +292,8 @@ function verifyOtpAndLogin() {
 function offrollViewLogout(){
   document.getElementById("offrollViewLogin").style.display = "block";
   document.getElementById("offrollViewPrivate").classList.remove("show");
-  document.getElementById("offrollLoginMobile").value = "";
-  document.getElementById("offrollLoginOtp").value = "";
-  document.getElementById("otpField").style.display = "none";
-  document.getElementById("loginBtn").style.display = "none";
-  document.getElementById("otpNotice").style.display = "none";
+  document.getElementById("loginEmpId").value = "";
+  document.getElementById("loginEmpName").value = "";
 }
 </script>
 
