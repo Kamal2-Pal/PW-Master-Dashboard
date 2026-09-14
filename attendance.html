@@ -178,7 +178,8 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
 </main>
 
 <script>
-const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSUaqawRHr-P4V8RZNh5_wuMBKipgIKf2tN1Pzsd4IXjPNqinGgGC9sTSpam4JU4vB_zlcy06b8LORa/pub?gid=642260073&single=true&output=csv";
+// Naya Published Google Sheet URL Update kar diya gaya hai
+const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRFoCW6qj1J85c8Z1sOSJqvexKtECuM1UMEANVIFQ1yVJRvGixR5VNh4VT66O23pi7p8y2sLc543337/pub?gid=1333099798&single=true&output=csv";
 
 let parsedData = [];
 let currentMatchedRow = null;
@@ -232,7 +233,6 @@ function parseSheetDate(dateStr) {
   return new Date(year, month, day, 12, 0, 0);
 }
 
-// Format date to clean standard format (e.g. "14-Sep")
 function formatCleanDateStr(dateObj) {
   if (!dateObj) return "";
   let day = dateObj.getDate();
