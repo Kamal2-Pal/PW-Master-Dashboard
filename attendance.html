@@ -183,7 +183,7 @@ const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS
 let parsedData = [];
 let currentMatchedRow = null;
 let currentHeaderRow = null;
-let dateColumnsInfo = []; // Stores { colIndex, dateObj, dateStr }
+let dateColumnsInfo = [];
 
 const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -229,8 +229,15 @@ function parseSheetDate(dateStr) {
   if (month === undefined || isNaN(day)) return null;
 
   let year = new Date().getFullYear();
-  // Adjust year for Dec-Jan boundary logic
   return new Date(year, month, day, 12, 0, 0);
+}
+
+// Format date to clean standard format (e.g. "14-Sep")
+function formatCleanDateStr(dateObj) {
+  if (!dateObj) return "";
+  let day = dateObj.getDate();
+  let monthShort = monthNames[dateObj.getMonth()];
+  return `${day}-${monthShort}`;
 }
 
 function verifyUserAndLogin() {
@@ -267,7 +274,6 @@ function verifyUserAndLogin() {
     return;
   }
 
-  // Find Header Row
   currentHeaderRow = null;
   for(let i=0; i<parsedData.length; i++){
     if(parsedData[i] && String(parsedData[i][1]).toLowerCase().includes("emp")){
@@ -277,7 +283,6 @@ function verifyUserAndLogin() {
   }
   if(!currentHeaderRow) currentHeaderRow = parsedData[1] || parsedData[0];
 
-  // Populate Profile Info
   document.getElementById("dispEmpId").textContent = currentMatchedRow[1] || "-";
   document.getElementById("dispEmpName").textContent = currentMatchedRow[2] || "-";
   document.getElementById("dispFatherName").textContent = currentMatchedRow[3] || "-";
@@ -287,7 +292,6 @@ function verifyUserAndLogin() {
   document.getElementById("dispStatus").textContent = currentMatchedRow[7] || "-";
   document.getElementById("dispVendor").textContent = currentMatchedRow[8] || "-";
 
-  // Process Date Columns
   dateColumnsInfo = [];
   for(let col = 9; col < currentMatchedRow.length; col++){
     let dateStr = currentHeaderRow[col] ? currentHeaderRow[col].trim() : "";
@@ -299,7 +303,7 @@ function verifyUserAndLogin() {
       dateColumnsInfo.push({
         colIndex: col,
         dateObj: parsedDate,
-        dateStr: dateStr
+        cleanDateStr: formatCleanDateStr(parsedDate)
       });
     }
   }
@@ -310,14 +314,12 @@ function verifyUserAndLogin() {
   document.getElementById("offrollViewPrivate").classList.add("show");
 }
 
-// Generate Month Cycles (26th of Prev Month to 25th of Current Month)
 function buildMonthCycleDropdown() {
   let selectEl = document.getElementById("monthCycleSelect");
   selectEl.innerHTML = "";
 
   if(dateColumnsInfo.length === 0) return;
 
-  // Find unique cycles from sheet dates
   let cyclesMap = {};
 
   dateColumnsInfo.forEach(item => {
@@ -328,11 +330,9 @@ function buildMonthCycleDropdown() {
 
     let cycleMonth, cycleYear;
     if(day >= 26) {
-      // 26th onwards belongs to the next month's cycle
       cycleMonth = (month + 1) % 12;
       cycleYear = month === 11 ? year + 1 : year;
     } else {
-      // 1st to 25th belongs to current month's cycle
       cycleMonth = month;
       cycleYear = year;
     }
@@ -358,7 +358,6 @@ function buildMonthCycleDropdown() {
     selectEl.appendChild(opt);
   });
 
-  // Select latest cycle by default
   if(keys.length > 0) {
     selectEl.value = keys[keys.length - 1];
   }
@@ -393,9 +392,8 @@ function renderSelectedMonthAttendance() {
       itemCycleYear = year;
     }
 
-    // Filter dates for the selected cycle
     if(itemCycleMonth === targetMonth && itemCycleYear === targetYear) {
-      if(d > today) return; // Future date skip
+      if(d > today) return;
 
       let statusVal = currentMatchedRow[item.colIndex] ? String(currentMatchedRow[item.colIndex]).trim() : "";
       let upperStatus = statusVal.toUpperCase();
@@ -416,7 +414,7 @@ function renderSelectedMonthAttendance() {
       else if(upperStatus === "A") { aCount++; statusClass = "status-A"; }
 
       tbodyHtml += `<tr>
-        <td><b>${item.dateStr}</b></td>
+        <td><b>${item.cleanDateStr}</b></td>
         <td class="${statusClass}">${statusVal}</td>
       </tr>`;
     }
