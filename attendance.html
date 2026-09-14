@@ -28,9 +28,12 @@ h1{font-size:18px;margin:0 0 2px}
 
 .offroll-view-private{display:none}
 .offroll-view-private.show{display:block}
-.offroll-view-head{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center}
+.offroll-view-head{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
 .offroll-view-head h3{margin:0 0 4px;font-size:18px}
 .offroll-view-head p{margin:0;font-size:12px;color:#6d7a88}
+.month-selector{display:flex;align-items:center;gap:10px}
+.month-selector label{font-size:12px;font-weight:700;color:#657281;text-transform:uppercase}
+.month-selector select{padding:8px 12px;border-radius:8px;border:1px solid #ccd5df;font-size:13px;font-weight:700;background:#f7f9fb;outline:0;cursor:pointer}
 .logout-btn{border:1px solid #f5c6cb;background:#fff;padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer;color:#d32f2f;font-size:13px}
 
 /* KPI Cards Layout */
@@ -75,6 +78,7 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
   .offroll-view-kpis{grid-template-columns:repeat(2,1fr);gap:8px}
   .offroll-view-employee-grid{grid-template-columns:1fr;gap:8px}
   .offroll-login-card{margin:20px 10px;padding:20px}
+  .offroll-view-head{flex-direction:column;align-items:flex-start}
   th,td{padding:8px 10px}
 }
 </style>
@@ -121,7 +125,13 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
         <h3>My Attendance Dashboard</h3>
         <p>Verified Credentials</p>
       </div>
-      <button class="logout-btn" onclick="offrollViewLogout()">Logout</button>
+      
+      <!-- Month Cycle Filter -->
+      <div class="month-selector">
+        <label>Cycle Month:</label>
+        <select id="monthCycleSelect" onchange="renderSelectedMonthAttendance()"></select>
+        <button class="logout-btn" onclick="offrollViewLogout()">Logout</button>
+      </div>
     </div>
 
     <!-- Attendance Summary KPIs -->
@@ -171,6 +181,11 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
 const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSUaqawRHr-P4V8RZNh5_wuMBKipgIKf2tN1Pzsd4IXjPNqinGgGC9sTSpam4JU4vB_zlcy06b8LORa/pub?gid=642260073&single=true&output=csv";
 
 let parsedData = [];
+let currentMatchedRow = null;
+let currentHeaderRow = null;
+let dateColumnsInfo = []; // Stores { colIndex, dateObj, dateStr }
+
+const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function fetchSheetData() {
   const syncText = document.getElementById("syncText");
@@ -213,8 +228,9 @@ function parseSheetDate(dateStr) {
   let month = monthMap[monthStr];
   if (month === undefined || isNaN(day)) return null;
 
-  let now = new Date();
-  return new Date(now.getFullYear(), month, day, 23, 59, 59);
+  let year = new Date().getFullYear();
+  // Adjust year for Dec-Jan boundary logic
+  return new Date(year, month, day, 12, 0, 0);
 }
 
 function verifyUserAndLogin() {
@@ -231,7 +247,7 @@ function verifyUserAndLogin() {
     return;
   }
 
-  let matchedEmpRow = null;
+  currentMatchedRow = null;
 
   for(let i=0; i<parsedData.length; i++){
     let row = parsedData[i];
@@ -240,44 +256,121 @@ function verifyUserAndLogin() {
       let sheetEmpName = cleanString(row[2]);
 
       if(sheetEmpId === inputEmpId && sheetEmpName === inputEmpName){
-        matchedEmpRow = row;
+        currentMatchedRow = row;
         break;
       }
     }
   }
 
-  if(!matchedEmpRow) {
+  if(!currentMatchedRow) {
     alert("Invalid Credentials! User ID (Emp ID) ya Password (Name) sahi nahi hai.");
     return;
   }
 
-  // Find Header Row containing 'Emp ID'
-  let headerRow = null;
+  // Find Header Row
+  currentHeaderRow = null;
   for(let i=0; i<parsedData.length; i++){
     if(parsedData[i] && String(parsedData[i][1]).toLowerCase().includes("emp")){
-      headerRow = parsedData[i];
+      currentHeaderRow = parsedData[i];
       break;
     }
   }
-  if(!headerRow) headerRow = parsedData[1] || parsedData[0];
+  if(!currentHeaderRow) currentHeaderRow = parsedData[1] || parsedData[0];
 
-  // Exact Google Sheet Column Mapping:
-  // Col B (Index 1) = Emp ID
-  // Col C (Index 2) = Name
-  // Col D (Index 3) = Father Name
-  // Col E (Index 4) = Dept
-  // Col F (Index 5) = Designation
-  // Col G (Index 6) = DOJ
-  // Col H (Index 7) = Status (Active/Inactive)
-  // Col I (Index 8) = Vendor (VMSS)
-  document.getElementById("dispEmpId").textContent = matchedEmpRow[1] || "-";
-  document.getElementById("dispEmpName").textContent = matchedEmpRow[2] || "-";
-  document.getElementById("dispFatherName").textContent = matchedEmpRow[3] || "-";
-  document.getElementById("dispDept").textContent = matchedEmpRow[4] || "-";
-  document.getElementById("dispDesig").textContent = matchedEmpRow[5] || "-";
-  document.getElementById("dispDoj").textContent = matchedEmpRow[6] || "-";
-  document.getElementById("dispStatus").textContent = matchedEmpRow[7] || "-";
-  document.getElementById("dispVendor").textContent = matchedEmpRow[8] || "-";
+  // Populate Profile Info
+  document.getElementById("dispEmpId").textContent = currentMatchedRow[1] || "-";
+  document.getElementById("dispEmpName").textContent = currentMatchedRow[2] || "-";
+  document.getElementById("dispFatherName").textContent = currentMatchedRow[3] || "-";
+  document.getElementById("dispDept").textContent = currentMatchedRow[4] || "-";
+  document.getElementById("dispDesig").textContent = currentMatchedRow[5] || "-";
+  document.getElementById("dispDoj").textContent = currentMatchedRow[6] || "-";
+  document.getElementById("dispStatus").textContent = currentMatchedRow[7] || "-";
+  document.getElementById("dispVendor").textContent = currentMatchedRow[8] || "-";
+
+  // Process Date Columns
+  dateColumnsInfo = [];
+  for(let col = 9; col < currentMatchedRow.length; col++){
+    let dateStr = currentHeaderRow[col] ? currentHeaderRow[col].trim() : "";
+    if(!dateStr || dateStr.toLowerCase().includes("present") || dateStr.toLowerCase().includes("total") || dateStr.toLowerCase().includes("night")) {
+      continue;
+    }
+    let parsedDate = parseSheetDate(dateStr);
+    if(parsedDate) {
+      dateColumnsInfo.push({
+        colIndex: col,
+        dateObj: parsedDate,
+        dateStr: dateStr
+      });
+    }
+  }
+
+  buildMonthCycleDropdown();
+
+  document.getElementById("offrollViewLogin").style.display = "none";
+  document.getElementById("offrollViewPrivate").classList.add("show");
+}
+
+// Generate Month Cycles (26th of Prev Month to 25th of Current Month)
+function buildMonthCycleDropdown() {
+  let selectEl = document.getElementById("monthCycleSelect");
+  selectEl.innerHTML = "";
+
+  if(dateColumnsInfo.length === 0) return;
+
+  // Find unique cycles from sheet dates
+  let cyclesMap = {};
+
+  dateColumnsInfo.forEach(item => {
+    let d = item.dateObj;
+    let day = d.getDate();
+    let month = d.getMonth();
+    let year = d.getFullYear();
+
+    let cycleMonth, cycleYear;
+    if(day >= 26) {
+      // 26th onwards belongs to the next month's cycle
+      cycleMonth = (month + 1) % 12;
+      cycleYear = month === 11 ? year + 1 : year;
+    } else {
+      // 1st to 25th belongs to current month's cycle
+      cycleMonth = month;
+      cycleYear = year;
+    }
+
+    let cycleKey = `${cycleYear}-${cycleMonth}`;
+    if(!cyclesMap[cycleKey]) {
+      let prevMonth = (cycleMonth === 0) ? 11 : cycleMonth - 1;
+      let label = `26 ${monthNames[prevMonth]} - 25 ${monthNames[cycleMonth]}`;
+      cyclesMap[cycleKey] = {
+        key: cycleKey,
+        label: label,
+        targetMonth: cycleMonth,
+        targetYear: cycleYear
+      };
+    }
+  });
+
+  let keys = Object.keys(cyclesMap);
+  keys.forEach(k => {
+    let opt = document.createElement("option");
+    opt.value = cyclesMap[k].key;
+    opt.textContent = cyclesMap[k].label;
+    selectEl.appendChild(opt);
+  });
+
+  // Select latest cycle by default
+  if(keys.length > 0) {
+    selectEl.value = keys[keys.length - 1];
+  }
+
+  renderSelectedMonthAttendance();
+}
+
+function renderSelectedMonthAttendance() {
+  let selectedKey = document.getElementById("monthCycleSelect").value;
+  if(!selectedKey || !currentMatchedRow) return;
+
+  let [targetYear, targetMonth] = selectedKey.split("-").map(Number);
 
   let tbodyHtml = "";
   let totalDays = 0, pCount = 0, nCount = 0, lCount = 0, hdCount = 0, aCount = 0;
@@ -285,42 +378,49 @@ function verifyUserAndLogin() {
   const today = new Date();
   today.setHours(23, 59, 59, 999);
 
-  // Attendance Dates start from Column J (Index 9)
-  for(let col = 9; col < matchedEmpRow.length; col++){
-    let dateStr = headerRow[col] ? headerRow[col].trim() : "";
+  dateColumnsInfo.forEach(item => {
+    let d = item.dateObj;
+    let day = d.getDate();
+    let month = d.getMonth();
+    let year = d.getFullYear();
 
-    if(!dateStr || dateStr.toLowerCase().includes("present") || dateStr.toLowerCase().includes("total") || dateStr.toLowerCase().includes("night")) {
-      continue;
+    let itemCycleMonth, itemCycleYear;
+    if(day >= 26) {
+      itemCycleMonth = (month + 1) % 12;
+      itemCycleYear = month === 11 ? year + 1 : year;
+    } else {
+      itemCycleMonth = month;
+      itemCycleYear = year;
     }
 
-    let parsedDate = parseSheetDate(dateStr);
-    if(parsedDate && parsedDate > today) {
-      continue;
+    // Filter dates for the selected cycle
+    if(itemCycleMonth === targetMonth && itemCycleYear === targetYear) {
+      if(d > today) return; // Future date skip
+
+      let statusVal = currentMatchedRow[item.colIndex] ? String(currentMatchedRow[item.colIndex]).trim() : "";
+      let upperStatus = statusVal.toUpperCase();
+
+      if(!statusVal) {
+        upperStatus = "A";
+        statusVal = "A";
+      }
+
+      totalDays++;
+      let statusClass = "";
+
+      if(upperStatus === "P") { pCount++; statusClass = "status-P"; }
+      else if(upperStatus === "N") { nCount++; statusClass = "status-N"; }
+      else if(upperStatus === "L") { lCount++; statusClass = "status-L"; }
+      else if(upperStatus === "HD") { hdCount++; statusClass = "status-HD"; }
+      else if(upperStatus === "WO") { statusClass = "status-WO"; }
+      else if(upperStatus === "A") { aCount++; statusClass = "status-A"; }
+
+      tbodyHtml += `<tr>
+        <td><b>${item.dateStr}</b></td>
+        <td class="${statusClass}">${statusVal}</td>
+      </tr>`;
     }
-
-    let statusVal = matchedEmpRow[col] ? String(matchedEmpRow[col]).trim() : "";
-    let upperStatus = statusVal.toUpperCase();
-
-    if(!statusVal) {
-      upperStatus = "A";
-      statusVal = "A";
-    }
-
-    totalDays++;
-    let statusClass = "";
-
-    if(upperStatus === "P") { pCount++; statusClass = "status-P"; }
-    else if(upperStatus === "N") { nCount++; statusClass = "status-N"; }
-    else if(upperStatus === "L") { lCount++; statusClass = "status-L"; }
-    else if(upperStatus === "HD") { hdCount++; statusClass = "status-HD"; }
-    else if(upperStatus === "WO") { statusClass = "status-WO"; }
-    else if(upperStatus === "A") { aCount++; statusClass = "status-A"; }
-
-    tbodyHtml += `<tr>
-      <td><b>${dateStr}</b></td>
-      <td class="${statusClass}">${statusVal}</td>
-    </tr>`;
-  }
+  });
 
   document.getElementById("attendanceTbody").innerHTML = tbodyHtml;
   document.getElementById("kpiTotal").textContent = totalDays;
@@ -329,9 +429,6 @@ function verifyUserAndLogin() {
   document.getElementById("kpiLeave").textContent = lCount;
   document.getElementById("kpiHalfDay").textContent = hdCount;
   document.getElementById("kpiAbsent").textContent = aCount;
-
-  document.getElementById("offrollViewLogin").style.display = "none";
-  document.getElementById("offrollViewPrivate").classList.add("show");
 }
 
 function offrollViewLogout(){
