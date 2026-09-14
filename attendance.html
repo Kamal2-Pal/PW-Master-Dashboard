@@ -48,7 +48,7 @@ table{border-collapse:collapse;width:100%;font-size:13px}
 th,td{padding:10px 12px;border-bottom:1px solid #edf0f3;text-align:left;white-space:nowrap}
 th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transform:uppercase;color:#657281}
 
-/* Status Colors */
+/* Status Styling */
 .status-P{color:#18753b;font-weight:700}
 .status-N{color:#1565c0;font-weight:700}
 .status-L{color:#e2a400;font-weight:700}
@@ -212,6 +212,41 @@ function generateOtp() {
   document.getElementById("loginBtn").style.display = "block";
 }
 
+// Helper function to parse dates like "8-Sept", "14-September", "26-July"
+function parseSheetDate(dateStr) {
+  if (!dateStr) return null;
+  let str = dateStr.trim();
+  let parts = str.split("-");
+  if (parts.length < 2) return null;
+
+  let day = parseInt(parts[0], 10);
+  let monthStr = parts[1].toLowerCase();
+
+  const monthMap = {
+    jan: 0, january: 0,
+    feb: 1, february: 1,
+    mar: 2, march: 2,
+    apr: 3, april: 3,
+    may: 4,
+    jun: 5, june: 5,
+    jul: 6, july: 6,
+    aug: 7, august: 7,
+    sep: 8, sept: 8, september: 8,
+    oct: 9, october: 9,
+    nov: 10, november: 10,
+    dec: 11, december: 11
+  };
+
+  let month = monthMap[monthStr];
+  if (month === undefined || isNaN(day)) return null;
+
+  let now = new Date();
+  let year = now.getFullYear();
+  
+  // Set time to end of day (23:59:59) so current date is fully included
+  return new Date(year, month, day, 23, 59, 59);
+}
+
 function verifyOtpAndLogin() {
   const userOtp = document.getElementById("offrollLoginOtp").value.trim();
 
@@ -236,19 +271,29 @@ function verifyOtpAndLogin() {
 
   let tbodyHtml = "";
   let totalDays = 0, pCount = 0, nCount = 0, lCount = 0, hdCount = 0, aCount = 0;
+  
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
 
   for(let col = 11; col < matchedEmpRow.length; col++){
     let dateStr = headerRow[col] ? headerRow[col].trim() : "";
 
-    // Ignore bottom summary rows
+    // Skip summary row headers
     if(!dateStr || dateStr.toLowerCase().includes("present") || dateStr.toLowerCase().includes("total") || dateStr.toLowerCase().includes("night")) {
+      continue;
+    }
+
+    let parsedDate = parseSheetDate(dateStr);
+
+    // Skip upcoming/future dates beyond today
+    if(parsedDate && parsedDate > today) {
       continue;
     }
 
     let statusVal = matchedEmpRow[col] ? String(matchedEmpRow[col]).trim() : "";
     let upperStatus = statusVal.toUpperCase();
 
-    // Blank cell ko Absent (A) consider karein
+    // Blank cell past/today date ke liye Absent (A) consider hoga
     if(!statusVal) {
       upperStatus = "A";
       statusVal = "A";
