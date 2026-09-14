@@ -23,9 +23,10 @@ h1{font-size:22px;margin:0 0 4px}
 .offroll-login-form{display:grid;gap:16px}
 .offroll-login-form label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:#657281;font-weight:700;text-transform:uppercase}
 .offroll-login-form input{width:100%;padding:12px;border:1px solid #ccd5df;border-radius:8px;font-size:14px;outline:0}
-.offroll-login-form button{width:100%;margin-top:8px;background:#151b23;color:#fff;border:0;padding:12px;border-radius:8px;font-weight:700;font-size:15px;cursor:pointer}
+.offroll-login-form button{width:100%;margin-top:8px;background:#25d366;color:#fff;border:0;padding:12px;border-radius:8px;font-weight:700;font-size:15px;cursor:pointer}
+.offroll-login-form button:hover{background:#1eb857}
 
-.otp-box{display:none;background:#eefbe7;border:1px solid #c3e6cb;padding:10px;border-radius:8px;color:#155724;font-size:13px;margin-top:5px;text-align:center}
+.otp-box{display:none;background:#eefbe7;border:1px solid #c3e6cb;padding:12px;border-radius:8px;color:#155724;font-size:13px;margin-top:5px;text-align:center}
 
 .offroll-view-private{display:none}
 .offroll-view-private.show{display:block}
@@ -64,7 +65,7 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
     <div class="logo">P</div>
     <div>
       <h1>PW - Offroll Attendance Portal</h1>
-      <div class="sub">Mobile OTP Verification System</div>
+      <div class="sub">Free WhatsApp OTP Verification</div>
     </div>
  </div>
 </header>
@@ -78,23 +79,23 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
 
   <div id="offrollViewLogin" class="offroll-login-card">
     <h2>Employee Login</h2>
-    <p class="login-note">Apna registered <b>Mobile Number</b> enter karke OTP mangwayein.</p>
+    <p class="login-note">Apna registered <b>Mobile Number</b> enter karke Verification Code mangwayein.</p>
     
     <form class="offroll-login-form" onsubmit="event.preventDefault(); verifyOtpAndLogin();">
       <label>Mobile Number
         <div style="display:flex;gap:8px">
           <input id="offrollLoginMobile" type="text" placeholder="e.g. 9837105212" required>
-          <button type="button" onclick="generateOtp()" style="width:130px;margin:0;font-size:13px">Get OTP</button>
+          <button type="button" onclick="sendWhatsappVerification()" style="width:170px;margin:0;font-size:12px">📲 Get Code on WA</button>
         </div>
       </label>
 
       <div id="otpNotice" class="otp-box"></div>
 
-      <label id="otpField" style="display:none">Enter OTP
-        <input id="offrollLoginOtp" type="text" placeholder="4-Digit OTP enter karein">
+      <label id="otpField" style="display:none">Enter 4-Digit Code
+        <input id="offrollLoginOtp" type="text" placeholder="Enter code received on WhatsApp">
       </label>
 
-      <button id="loginBtn" type="submit" style="display:none">Verify OTP & View Attendance</button>
+      <button id="loginBtn" type="submit" style="display:none;background:#151b23">Verify Code & View Attendance</button>
     </form>
   </div>
 
@@ -102,7 +103,7 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
     <div class="offroll-view-head">
       <div>
         <h3>My Attendance Dashboard</h3>
-        <p>Verified via Mobile OTP</p>
+        <p>Verified via WhatsApp OTP</p>
       </div>
       <button class="logout-btn" onclick="offrollViewLogout()">Logout</button>
     </div>
@@ -145,8 +146,11 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
 <script>
 const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSUaqawRHr-P4V8RZNh5_wuMBKipgIKf2tN1Pzsd4IXjPNqinGgGC9sTSpam4JU4vB_zlcy06b8LORa/pub?gid=642260073&single=true&output=csv";
 
+// Apna Admin/HR WhatsApp number yahan enter karein (With Country Code '91')
+const ADMIN_WHATSAPP_NUMBER = "919837105212"; 
+
 let parsedData = [];
-let currentOtp = null;
+let generatedOtp = null;
 let matchedEmpRow = null;
 
 function fetchSheetData() {
@@ -171,10 +175,10 @@ function cleanStr(str) {
   return String(str || "").replace(/\D/g, "");
 }
 
-function generateOtp() {
-  const searchMobile = cleanStr(document.getElementById("offrollLoginMobile").value);
-  if(!searchMobile || searchMobile.length < 8) {
-    alert("Kripya sahi Mobile Number dalein!");
+function sendWhatsappVerification() {
+  const inputMobile = cleanStr(document.getElementById("offrollLoginMobile").value);
+  if(!inputMobile || inputMobile.length < 8) {
+    alert("Kripya sahi Mobile Number enter karein!");
     return;
   }
 
@@ -188,7 +192,7 @@ function generateOtp() {
     let row = parsedData[i];
     if(row && row.length > 2){
       for(let c=0; c<row.length; c++){
-        if(cleanStr(row[c]) === searchMobile){
+        if(cleanStr(row[c]) === inputMobile){
           matchedEmpRow = row;
           break;
         }
@@ -198,21 +202,29 @@ function generateOtp() {
   }
 
   if(!matchedEmpRow) {
-    alert("Ye Mobile Number Google Sheet me nahi mila! Kripya 1-2 minute wait karein ya 'Refresh Data' click karein.");
+    alert("Ye Mobile Number Google Sheet me nahi mila!");
     return;
   }
 
-  currentOtp = Math.floor(1000 + Math.random() * 9000);
+  // Generate 4-digit code
+  generatedOtp = Math.floor(1000 + Math.random() * 9000);
+  let empName = matchedEmpRow[2] || "Employee";
+
+  // Text message to be sent via WhatsApp
+  let waText = encodeURIComponent(`Hello Admin, Main PW Attendance Login ke liye verification code request kar raha hu.\n\nName: ${empName}\nMobile: ${inputMobile}\nLogin Code: ${generatedOtp}`);
+
+  // Redirect to WhatsApp Deep Link
+  let waUrl = `https://wa.me/${ADMIN_WHATSAPP_NUMBER}?text=${waText}`;
+  window.open(waUrl, "_blank");
 
   const otpNotice = document.getElementById("otpNotice");
   otpNotice.style.display = "block";
-  otpNotice.innerHTML = `💬 OTP Sent! Enter <b>${currentOtp}</b> to Login.`;
+  otpNotice.innerHTML = `📲 <b>WhatsApp Open Ho Gaya Hai!</b><br>Message Send karne ke baad wahan dikha code <b>(${generatedOtp})</b> yahan enter karein.`;
 
   document.getElementById("otpField").style.display = "flex";
   document.getElementById("loginBtn").style.display = "block";
 }
 
-// Helper function to parse dates like "8-Sept", "14-September", "26-July"
 function parseSheetDate(dateStr) {
   if (!dateStr) return null;
   let str = dateStr.trim();
@@ -223,35 +235,24 @@ function parseSheetDate(dateStr) {
   let monthStr = parts[1].toLowerCase();
 
   const monthMap = {
-    jan: 0, january: 0,
-    feb: 1, february: 1,
-    mar: 2, march: 2,
-    apr: 3, april: 3,
-    may: 4,
-    jun: 5, june: 5,
-    jul: 6, july: 6,
-    aug: 7, august: 7,
-    sep: 8, sept: 8, september: 8,
-    oct: 9, october: 9,
-    nov: 10, november: 10,
-    dec: 11, december: 11
+    jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2,
+    apr: 3, april: 3, may: 4, jun: 5, june: 5, jul: 6, july: 6,
+    aug: 7, august: 7, sep: 8, sept: 8, september: 8, oct: 9, october: 9,
+    nov: 10, november: 10, dec: 11, december: 11
   };
 
   let month = monthMap[monthStr];
   if (month === undefined || isNaN(day)) return null;
 
   let now = new Date();
-  let year = now.getFullYear();
-  
-  // Set time to end of day (23:59:59) so current date is fully included
-  return new Date(year, month, day, 23, 59, 59);
+  return new Date(now.getFullYear(), month, day, 23, 59, 59);
 }
 
 function verifyOtpAndLogin() {
   const userOtp = document.getElementById("offrollLoginOtp").value.trim();
 
-  if(userOtp !== String(currentOtp)) {
-    alert("Galat OTP! Kripya sahi OTP enter karein.");
+  if(userOtp !== String(generatedOtp)) {
+    alert("Galat Code! Kripya sahi 4-digit verification code enter karein.");
     return;
   }
 
@@ -278,14 +279,11 @@ function verifyOtpAndLogin() {
   for(let col = 11; col < matchedEmpRow.length; col++){
     let dateStr = headerRow[col] ? headerRow[col].trim() : "";
 
-    // Skip summary row headers
     if(!dateStr || dateStr.toLowerCase().includes("present") || dateStr.toLowerCase().includes("total") || dateStr.toLowerCase().includes("night")) {
       continue;
     }
 
     let parsedDate = parseSheetDate(dateStr);
-
-    // Skip upcoming/future dates beyond today
     if(parsedDate && parsedDate > today) {
       continue;
     }
@@ -293,7 +291,6 @@ function verifyOtpAndLogin() {
     let statusVal = matchedEmpRow[col] ? String(matchedEmpRow[col]).trim() : "";
     let upperStatus = statusVal.toUpperCase();
 
-    // Blank cell past/today date ke liye Absent (A) consider hoga
     if(!statusVal) {
       upperStatus = "A";
       statusVal = "A";
@@ -302,24 +299,12 @@ function verifyOtpAndLogin() {
     totalDays++;
     let statusClass = "";
 
-    if(upperStatus === "P") {
-      pCount++;
-      statusClass = "status-P";
-    } else if(upperStatus === "N") {
-      nCount++;
-      statusClass = "status-N";
-    } else if(upperStatus === "L") {
-      lCount++;
-      statusClass = "status-L";
-    } else if(upperStatus === "HD") {
-      hdCount++;
-      statusClass = "status-HD";
-    } else if(upperStatus === "WO") {
-      statusClass = "status-WO";
-    } else if(upperStatus === "A") {
-      aCount++;
-      statusClass = "status-A";
-    }
+    if(upperStatus === "P") { pCount++; statusClass = "status-P"; }
+    else if(upperStatus === "N") { nCount++; statusClass = "status-N"; }
+    else if(upperStatus === "L") { lCount++; statusClass = "status-L"; }
+    else if(upperStatus === "HD") { hdCount++; statusClass = "status-HD"; }
+    else if(upperStatus === "WO") { statusClass = "status-WO"; }
+    else if(upperStatus === "A") { aCount++; statusClass = "status-A"; }
 
     tbodyHtml += `<tr>
       <td><b>${dateStr}</b></td>
