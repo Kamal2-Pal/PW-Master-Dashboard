@@ -32,10 +32,10 @@ h1{font-size:22px;margin:0 0 4px}
 .offroll-view-head{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center}
 .logout-btn{border:1px solid #f5c6cb;background:#fff;padding:8px 16px;border-radius:8px;font-weight:700;cursor:pointer;color:#d32f2f}
 
-.offroll-view-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
-.offroll-view-kpi{background:#fff;border:1px solid #e3e8ee;border-radius:12px;padding:16px}
-.offroll-view-kpi small{color:#6b7785;text-transform:uppercase;font-weight:700;font-size:11px}
-.offroll-view-kpi strong{display:block;font-size:24px;margin-top:8px}
+.offroll-view-kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px}
+.offroll-view-kpi{background:#fff;border:1px solid #e3e8ee;border-radius:12px;padding:12px 14px}
+.offroll-view-kpi small{color:#6b7785;text-transform:uppercase;font-weight:700;font-size:10px}
+.offroll-view-kpi strong{display:block;font-size:20px;margin-top:6px}
 
 .offroll-view-employee{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:18px;margin-bottom:16px}
 .offroll-view-employee-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
@@ -47,9 +47,14 @@ h1{font-size:22px;margin:0 0 4px}
 table{border-collapse:collapse;width:100%;font-size:13px}
 th,td{padding:10px 12px;border-bottom:1px solid #edf0f3;text-align:left;white-space:nowrap}
 th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transform:uppercase;color:#657281}
+
+/* Status Colors */
 .status-P{color:#18753b;font-weight:700}
-.status-N{color:#d32f2f;font-weight:700}
+.status-N{color:#1565c0;font-weight:700}
 .status-L{color:#e2a400;font-weight:700}
+.status-HD{color:#e65100;font-weight:700}
+.status-WO{color:#6a1b9a;font-weight:700}
+.status-A{color:#d32f2f;font-weight:700}
 </style>
 </head>
 <body>
@@ -78,7 +83,7 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
     <form class="offroll-login-form" onsubmit="event.preventDefault(); verifyOtpAndLogin();">
       <label>Mobile Number
         <div style="display:flex;gap:8px">
-          <input id="offrollLoginMobile" type="text" placeholder="e.g. 8076748524" required>
+          <input id="offrollLoginMobile" type="text" placeholder="e.g. 9837105212" required>
           <button type="button" onclick="generateOtp()" style="width:130px;margin:0;font-size:13px">Get OTP</button>
         </div>
       </label>
@@ -105,8 +110,10 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
     <div class="offroll-view-kpis">
       <div class="offroll-view-kpi"><small>Total Days</small><strong id="kpiTotal">0</strong></div>
       <div class="offroll-view-kpi"><small>Present (P)</small><strong id="kpiPresent" style="color:#18753b">0</strong></div>
-      <div class="offroll-view-kpi"><small>Absent (N)</small><strong id="kpiAbsent" style="color:#d32f2f">0</strong></div>
+      <div class="offroll-view-kpi"><small>Night Pres. (N)</small><strong id="kpiNight" style="color:#1565c0">0</strong></div>
       <div class="offroll-view-kpi"><small>Leave (L)</small><strong id="kpiLeave" style="color:#e2a400">0</strong></div>
+      <div class="offroll-view-kpi"><small>Half Day (HD)</small><strong id="kpiHalfDay" style="color:#e65100">0</strong></div>
+      <div class="offroll-view-kpi"><small>Absent (A)</small><strong id="kpiAbsent" style="color:#d32f2f">0</strong></div>
     </div>
 
     <section class="offroll-view-employee">
@@ -177,7 +184,6 @@ function generateOtp() {
   }
 
   matchedEmpRow = null;
-  // Flexible search across row columns for mobile number match
   for(let i=0; i<parsedData.length; i++){
     let row = parsedData[i];
     if(row && row.length > 2){
@@ -229,33 +235,60 @@ function verifyOtpAndLogin() {
   document.getElementById("dispDesig").textContent = matchedEmpRow[5] || "-";
 
   let tbodyHtml = "";
-  let totalDays = 0, pCount = 0, nCount = 0, lCount = 0;
+  let totalDays = 0, pCount = 0, nCount = 0, lCount = 0, hdCount = 0, aCount = 0;
 
   for(let col = 11; col < matchedEmpRow.length; col++){
     let dateStr = headerRow[col] ? headerRow[col].trim() : "";
-    let statusVal = matchedEmpRow[col] ? String(matchedEmpRow[col]).trim() : "";
 
-    if(dateStr && statusVal){
-      totalDays++;
-      let statusClass = "";
-      let upperStatus = statusVal.toUpperCase();
-
-      if(upperStatus === "P"){ pCount++; statusClass = "status-P"; }
-      else if(upperStatus === "N"){ nCount++; statusClass = "status-N"; }
-      else if(upperStatus === "L"){ lCount++; statusClass = "status-L"; }
-
-      tbodyHtml += `<tr>
-        <td><b>${dateStr}</b></td>
-        <td class="${statusClass}">${statusVal}</td>
-      </tr>`;
+    // Ignore bottom summary rows
+    if(!dateStr || dateStr.toLowerCase().includes("present") || dateStr.toLowerCase().includes("total") || dateStr.toLowerCase().includes("night")) {
+      continue;
     }
+
+    let statusVal = matchedEmpRow[col] ? String(matchedEmpRow[col]).trim() : "";
+    let upperStatus = statusVal.toUpperCase();
+
+    // Blank cell ko Absent (A) consider karein
+    if(!statusVal) {
+      upperStatus = "A";
+      statusVal = "A";
+    }
+
+    totalDays++;
+    let statusClass = "";
+
+    if(upperStatus === "P") {
+      pCount++;
+      statusClass = "status-P";
+    } else if(upperStatus === "N") {
+      nCount++;
+      statusClass = "status-N";
+    } else if(upperStatus === "L") {
+      lCount++;
+      statusClass = "status-L";
+    } else if(upperStatus === "HD") {
+      hdCount++;
+      statusClass = "status-HD";
+    } else if(upperStatus === "WO") {
+      statusClass = "status-WO";
+    } else if(upperStatus === "A") {
+      aCount++;
+      statusClass = "status-A";
+    }
+
+    tbodyHtml += `<tr>
+      <td><b>${dateStr}</b></td>
+      <td class="${statusClass}">${statusVal}</td>
+    </tr>`;
   }
 
   document.getElementById("attendanceTbody").innerHTML = tbodyHtml;
   document.getElementById("kpiTotal").textContent = totalDays;
   document.getElementById("kpiPresent").textContent = pCount;
-  document.getElementById("kpiAbsent").textContent = nCount;
+  document.getElementById("kpiNight").textContent = nCount;
   document.getElementById("kpiLeave").textContent = lCount;
+  document.getElementById("kpiHalfDay").textContent = hdCount;
+  document.getElementById("kpiAbsent").textContent = aCount;
 
   document.getElementById("offrollViewLogin").style.display = "none";
   document.getElementById("offrollViewPrivate").classList.add("show");
