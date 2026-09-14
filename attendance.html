@@ -23,9 +23,7 @@ h1{font-size:22px;margin:0 0 4px}
 .offroll-login-form{display:grid;gap:16px}
 .offroll-login-form label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:#657281;font-weight:700;text-transform:uppercase}
 .offroll-login-form input{width:100%;padding:12px;border:1px solid #ccd5df;border-radius:8px;font-size:14px;outline:0}
-.btn-group{display:flex;gap:8px}
 .offroll-login-form button{width:100%;margin-top:8px;background:#151b23;color:#fff;border:0;padding:12px;border-radius:8px;font-weight:700;font-size:15px;cursor:pointer}
-.offroll-login-form button:hover{background:#242c36}
 
 .otp-box{display:none;background:#eefbe7;border:1px solid #c3e6cb;padding:10px;border-radius:8px;color:#155724;font-size:13px;margin-top:5px;text-align:center}
 
@@ -80,7 +78,7 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
     <form class="offroll-login-form" onsubmit="event.preventDefault(); verifyOtpAndLogin();">
       <label>Mobile Number
         <div style="display:flex;gap:8px">
-          <input id="offrollLoginMobile" type="text" placeholder="e.g. 9891821381" required>
+          <input id="offrollLoginMobile" type="text" placeholder="e.g. 8076748524" required>
           <button type="button" onclick="generateOtp()" style="width:130px;margin:0;font-size:13px">Get OTP</button>
         </div>
       </label>
@@ -148,7 +146,7 @@ function fetchSheetData() {
   const syncText = document.getElementById("syncText");
   syncText.textContent = "🔄 Fetching latest data from Google Sheet...";
 
-  Papa.parse(GOOGLE_SHEET_CSV_URL, {
+  Papa.parse(GOOGLE_SHEET_CSV_URL + "&t=" + new Date().getTime(), {
     download: true,
     complete: function(results) {
       parsedData = results.data;
@@ -163,42 +161,43 @@ function fetchSheetData() {
 window.onload = fetchSheetData;
 
 function cleanStr(str) {
-  return String(str || "").replace(/\s+/g, "").toLowerCase();
+  return String(str || "").replace(/\D/g, "");
 }
 
 function generateOtp() {
   const searchMobile = cleanStr(document.getElementById("offrollLoginMobile").value);
-  if(!searchMobile || searchMobile.length < 10) {
-    alert("Kripya sahi 10-digit Mobile Number dalei!");
+  if(!searchMobile || searchMobile.length < 8) {
+    alert("Kripya sahi Mobile Number dalein!");
     return;
   }
 
   if(parsedData.length === 0){
-    alert("Data load ho raha hai, kripya 2 second ruk kar try karein.");
+    alert("Data load ho raha hai, kripya Refresh Data par click karke try karein.");
     return;
   }
 
-  // Find Mobile Row (Column H / Index 7)
   matchedEmpRow = null;
+  // Flexible search across row columns for mobile number match
   for(let i=0; i<parsedData.length; i++){
     let row = parsedData[i];
-    if(row && row.length > 7){
-      if(cleanStr(row[7]) === searchMobile){
-        matchedEmpRow = row;
-        break;
+    if(row && row.length > 2){
+      for(let c=0; c<row.length; c++){
+        if(cleanStr(row[c]) === searchMobile){
+          matchedEmpRow = row;
+          break;
+        }
       }
+      if(matchedEmpRow) break;
     }
   }
 
   if(!matchedEmpRow) {
-    alert("Ye Mobile Number Google Sheet me nahi mila!");
+    alert("Ye Mobile Number Google Sheet me nahi mila! Kripya 1-2 minute wait karein ya 'Refresh Data' click karein.");
     return;
   }
 
-  // Generate 4-digit OTP
   currentOtp = Math.floor(1000 + Math.random() * 9000);
 
-  // Show OTP on Screen
   const otpNotice = document.getElementById("otpNotice");
   otpNotice.style.display = "block";
   otpNotice.innerHTML = `💬 OTP Sent! Enter <b>${currentOtp}</b> to Login.`;
@@ -217,14 +216,13 @@ function verifyOtpAndLogin() {
 
   let headerRow = null;
   for(let i=0; i<parsedData.length; i++){
-    if(parsedData[i] && cleanStr(parsedData[i][1]) === "empid"){
+    if(parsedData[i] && String(parsedData[i][1]).toLowerCase().includes("emp")){
       headerRow = parsedData[i];
       break;
     }
   }
   if(!headerRow) headerRow = parsedData[1] || parsedData[0];
 
-  // Populate User Profile
   document.getElementById("dispEmpId").textContent = matchedEmpRow[1] || "-";
   document.getElementById("dispEmpName").textContent = matchedEmpRow[2] || "-";
   document.getElementById("dispDept").textContent = matchedEmpRow[4] || "-";
