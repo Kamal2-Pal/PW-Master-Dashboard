@@ -39,7 +39,7 @@ h1{font-size:18px;margin:0 0 2px}
 .offroll-view-kpi small{color:#6b7785;text-transform:uppercase;font-weight:700;font-size:10px}
 .offroll-view-kpi strong{display:block;font-size:20px;margin-top:4px}
 
-/* 8 Header Columns Details Grid */
+/* Employee Profile Details Grid */
 .offroll-view-employee{background:#fff;border:1px solid #e1e6eb;border-radius:12px;padding:16px;margin-bottom:16px}
 .offroll-view-employee h4{margin:0 0 12px;font-size:13px;text-transform:uppercase;color:#657281;letter-spacing:0.5px}
 .offroll-view-employee-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
@@ -104,11 +104,11 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
     
     <form class="offroll-login-form" onsubmit="event.preventDefault(); verifyUserAndLogin();">
       <label>User ID (Emp ID)
-        <input id="loginEmpId" type="text" placeholder="e.g. V2371010501" required>
+        <input id="loginEmpId" type="text" placeholder="e.g. V5877201090" required>
       </label>
 
       <label>Password (Employee Name)
-        <input id="loginEmpName" type="password" placeholder="e.g. Ajeet" required>
+        <input id="loginEmpName" type="password" placeholder="e.g. Anil Kumar" required>
       </label>
 
       <button type="submit">Login to Dashboard</button>
@@ -134,7 +134,7 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
       <div class="offroll-view-kpi"><small>Absent (A)</small><strong id="kpiAbsent" style="color:#d32f2f">0</strong></div>
     </div>
 
-    <!-- Employee Profile Info (Without S.No. and Mobile Number) -->
+    <!-- Employee Information Section -->
     <section class="offroll-view-employee">
       <h4>Employee Information</h4>
       <div class="offroll-view-employee-grid">
@@ -251,6 +251,7 @@ function verifyUserAndLogin() {
     return;
   }
 
+  // Find Header Row containing 'Emp ID'
   let headerRow = null;
   for(let i=0; i<parsedData.length; i++){
     if(parsedData[i] && String(parsedData[i][1]).toLowerCase().includes("emp")){
@@ -260,15 +261,23 @@ function verifyUserAndLogin() {
   }
   if(!headerRow) headerRow = parsedData[1] || parsedData[0];
 
-  // Populating required fields (Skipping Col A: S.No. and Col H: Mobile Number)
+  // Exact Google Sheet Column Mapping:
+  // Col B (Index 1) = Emp ID
+  // Col C (Index 2) = Name
+  // Col D (Index 3) = Father Name
+  // Col E (Index 4) = Dept
+  // Col F (Index 5) = Designation
+  // Col G (Index 6) = DOJ
+  // Col H (Index 7) = Status (Active/Inactive)
+  // Col I (Index 8) = Vendor (VMSS)
   document.getElementById("dispEmpId").textContent = matchedEmpRow[1] || "-";
   document.getElementById("dispEmpName").textContent = matchedEmpRow[2] || "-";
   document.getElementById("dispFatherName").textContent = matchedEmpRow[3] || "-";
   document.getElementById("dispDept").textContent = matchedEmpRow[4] || "-";
   document.getElementById("dispDesig").textContent = matchedEmpRow[5] || "-";
   document.getElementById("dispDoj").textContent = matchedEmpRow[6] || "-";
-  document.getElementById("dispStatus").textContent = matchedEmpRow[8] || "-";
-  document.getElementById("dispVendor").textContent = matchedEmpRow[9] || "-";
+  document.getElementById("dispStatus").textContent = matchedEmpRow[7] || "-";
+  document.getElementById("dispVendor").textContent = matchedEmpRow[8] || "-";
 
   let tbodyHtml = "";
   let totalDays = 0, pCount = 0, nCount = 0, lCount = 0, hdCount = 0, aCount = 0;
@@ -276,7 +285,8 @@ function verifyUserAndLogin() {
   const today = new Date();
   today.setHours(23, 59, 59, 999);
 
-  for(let col = 10; col < matchedEmpRow.length; col++){
+  // Attendance Dates start from Column J (Index 9)
+  for(let col = 9; col < matchedEmpRow.length; col++){
     let dateStr = headerRow[col] ? headerRow[col].trim() : "";
 
     if(!dateStr || dateStr.toLowerCase().includes("present") || dateStr.toLowerCase().includes("total") || dateStr.toLowerCase().includes("night")) {
