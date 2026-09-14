@@ -23,8 +23,11 @@ h1{font-size:22px;margin:0 0 4px}
 .offroll-login-form{display:grid;gap:16px}
 .offroll-login-form label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:#657281;font-weight:700;text-transform:uppercase}
 .offroll-login-form input{width:100%;padding:12px;border:1px solid #ccd5df;border-radius:8px;font-size:14px;outline:0}
+.btn-group{display:flex;gap:8px}
 .offroll-login-form button{width:100%;margin-top:8px;background:#151b23;color:#fff;border:0;padding:12px;border-radius:8px;font-weight:700;font-size:15px;cursor:pointer}
 .offroll-login-form button:hover{background:#242c36}
+
+.otp-box{display:none;background:#eefbe7;border:1px solid #c3e6cb;padding:10px;border-radius:8px;color:#155724;font-size:13px;margin-top:5px;text-align:center}
 
 .offroll-view-private{display:none}
 .offroll-view-private.show{display:block}
@@ -58,7 +61,7 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
     <div class="logo">P</div>
     <div>
       <h1>PW - Offroll Attendance Portal</h1>
-      <div class="sub">Live Google Sheet Verification</div>
+      <div class="sub">Mobile OTP Verification System</div>
     </div>
  </div>
 </header>
@@ -72,15 +75,23 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
 
   <div id="offrollViewLogin" class="offroll-login-card">
     <h2>Employee Login</h2>
-    <p class="login-note">Apni attendance dekhne ke liye <b>Mobile Number</b> aur <b>DOJ</b> enter karein.</p>
-    <form class="offroll-login-form" onsubmit="event.preventDefault(); offrollViewLoginSubmit();">
+    <p class="login-note">Apna registered <b>Mobile Number</b> enter karke OTP mangwayein.</p>
+    
+    <form class="offroll-login-form" onsubmit="event.preventDefault(); verifyOtpAndLogin();">
       <label>Mobile Number
-        <input id="offrollLoginMobile" type="text" placeholder="e.g. 9891821381" required>
+        <div style="display:flex;gap:8px">
+          <input id="offrollLoginMobile" type="text" placeholder="e.g. 9891821381" required>
+          <button type="button" onclick="generateOtp()" style="width:130px;margin:0;font-size:13px">Get OTP</button>
+        </div>
       </label>
-      <label>Password (DOJ)
-        <input id="offrollLoginDoj" type="text" placeholder="e.g. 17-Dec-2025" required>
+
+      <div id="otpNotice" class="otp-box"></div>
+
+      <label id="otpField" style="display:none">Enter OTP
+        <input id="offrollLoginOtp" type="text" placeholder="4-Digit OTP enter karein">
       </label>
-      <button type="submit">View Attendance</button>
+
+      <button id="loginBtn" type="submit" style="display:none">Verify OTP & View Attendance</button>
     </form>
   </div>
 
@@ -88,7 +99,7 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
     <div class="offroll-view-head">
       <div>
         <h3>My Attendance Dashboard</h3>
-        <p>Live Synced with Sheet Data</p>
+        <p>Verified via Mobile OTP</p>
       </div>
       <button class="logout-btn" onclick="offrollViewLogout()">Logout</button>
     </div>
@@ -130,6 +141,8 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
 const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSUaqawRHr-P4V8RZNh5_wuMBKipgIKf2tN1Pzsd4IXjPNqinGgGC9sTSpam4JU4vB_zlcy06b8LORa/pub?gid=642260073&single=true&output=csv";
 
 let parsedData = [];
+let currentOtp = null;
+let matchedEmpRow = null;
 
 function fetchSheetData() {
   const syncText = document.getElementById("syncText");
@@ -149,67 +162,80 @@ function fetchSheetData() {
 
 window.onload = fetchSheetData;
 
-// Standardize text comparison by removing spaces and making lowercase
 function cleanStr(str) {
   return String(str || "").replace(/\s+/g, "").toLowerCase();
 }
 
-function offrollViewLoginSubmit(){
+function generateOtp() {
   const searchMobile = cleanStr(document.getElementById("offrollLoginMobile").value);
-  const searchDoj = cleanStr(document.getElementById("offrollLoginDoj").value);
-
-  if(!searchMobile || !searchDoj) return;
-
-  if(parsedData.length === 0){
-    alert("Data load hone me 2 second lag rahe hain. Kripya firse try karein!");
+  if(!searchMobile || searchMobile.length < 10) {
+    alert("Kripya sahi 10-digit Mobile Number dalei!");
     return;
   }
 
-  let empRow = null;
-  let headerRow = null;
+  if(parsedData.length === 0){
+    alert("Data load ho raha hai, kripya 2 second ruk kar try karein.");
+    return;
+  }
 
-  // Header row identification for dates (Starts at Column L / Index 11)
+  // Find Mobile Row (Column H / Index 7)
+  matchedEmpRow = null;
+  for(let i=0; i<parsedData.length; i++){
+    let row = parsedData[i];
+    if(row && row.length > 7){
+      if(cleanStr(row[7]) === searchMobile){
+        matchedEmpRow = row;
+        break;
+      }
+    }
+  }
+
+  if(!matchedEmpRow) {
+    alert("Ye Mobile Number Google Sheet me nahi mila!");
+    return;
+  }
+
+  // Generate 4-digit OTP
+  currentOtp = Math.floor(1000 + Math.random() * 9000);
+
+  // Show OTP on Screen
+  const otpNotice = document.getElementById("otpNotice");
+  otpNotice.style.display = "block";
+  otpNotice.innerHTML = `💬 OTP Sent! Enter <b>${currentOtp}</b> to Login.`;
+
+  document.getElementById("otpField").style.display = "flex";
+  document.getElementById("loginBtn").style.display = "block";
+}
+
+function verifyOtpAndLogin() {
+  const userOtp = document.getElementById("offrollLoginOtp").value.trim();
+
+  if(userOtp !== String(currentOtp)) {
+    alert("Galat OTP! Kripya sahi OTP enter karein.");
+    return;
+  }
+
+  let headerRow = null;
   for(let i=0; i<parsedData.length; i++){
     if(parsedData[i] && cleanStr(parsedData[i][1]) === "empid"){
       headerRow = parsedData[i];
       break;
     }
   }
-
   if(!headerRow) headerRow = parsedData[1] || parsedData[0];
 
-  // Mobile (Column H / Index 7) and DOJ (Column G / Index 6) Match
-  for(let i=0; i<parsedData.length; i++){
-    let row = parsedData[i];
-    if(row && row.length > 7){
-      let rowMobile = cleanStr(row[7]);
-      let rowDoj = cleanStr(row[6]);
-
-      if(rowMobile === searchMobile && rowDoj === searchDoj){
-        empRow = row;
-        break;
-      }
-    }
-  }
-
-  if(!empRow){
-    alert("Mobile Number ya DOJ galat hai! Kripya Google Sheet ke mutabiq sahi details enter karein.");
-    return;
-  }
-
-  // Display User Profile Details
-  document.getElementById("dispEmpId").textContent = empRow[1] || "-";
-  document.getElementById("dispEmpName").textContent = empRow[2] || "-";
-  document.getElementById("dispDept").textContent = empRow[4] || "-";
-  document.getElementById("dispDesig").textContent = empRow[5] || "-";
+  // Populate User Profile
+  document.getElementById("dispEmpId").textContent = matchedEmpRow[1] || "-";
+  document.getElementById("dispEmpName").textContent = matchedEmpRow[2] || "-";
+  document.getElementById("dispDept").textContent = matchedEmpRow[4] || "-";
+  document.getElementById("dispDesig").textContent = matchedEmpRow[5] || "-";
 
   let tbodyHtml = "";
   let totalDays = 0, pCount = 0, nCount = 0, lCount = 0;
 
-  // Attendance Dates start from Index 11 (Column L - 26-July) onwards
-  for(let col = 11; col < empRow.length; col++){
+  for(let col = 11; col < matchedEmpRow.length; col++){
     let dateStr = headerRow[col] ? headerRow[col].trim() : "";
-    let statusVal = empRow[col] ? String(empRow[col]).trim() : "";
+    let statusVal = matchedEmpRow[col] ? String(matchedEmpRow[col]).trim() : "";
 
     if(dateStr && statusVal){
       totalDays++;
@@ -241,7 +267,10 @@ function offrollViewLogout(){
   document.getElementById("offrollViewLogin").style.display = "block";
   document.getElementById("offrollViewPrivate").classList.remove("show");
   document.getElementById("offrollLoginMobile").value = "";
-  document.getElementById("offrollLoginDoj").value = "";
+  document.getElementById("offrollLoginOtp").value = "";
+  document.getElementById("otpField").style.display = "none";
+  document.getElementById("loginBtn").style.display = "none";
+  document.getElementById("otpNotice").style.display = "none";
 }
 </script>
 
