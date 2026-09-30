@@ -178,8 +178,10 @@ th{position:sticky;top:0;background:#f7f9fb;z-index:1;font-size:11px;text-transf
 </main>
 
 <script>
-// Naya Published Google Sheet URL Update kar diya gaya hai
-const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1RX91B5syLvmUKNcQ0QbcWtagc3PTLwkbfhXT1cGAh-4/edit?gid=625360753#gid=625360753&single=true&output=csv";
+// Naye Sheet Tab (gid=625360753) ke saath URL update kiya gaya hai
+const SPREADSHEET_ID = "1RX91B5syLvmUKNcQ0QbcWtagc3PTLwkbfhXT1cGAh-4";
+const GID = "625360753";
+const GOOGLE_SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=${GID}`;
 
 let parsedData = [];
 let currentMatchedRow = null;
@@ -217,19 +219,19 @@ function parseSheetDate(dateStr) {
   if (parts.length < 2) return null;
 
   let day = parseInt(parts[0], 10);
-  let monthStr = parts[1].toLowerCase();
+  let monthStr = parts[1].toLowerCase().replace('.', '');
 
   const monthMap = {
     jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2,
     apr: 3, april: 3, may: 4, jun: 5, june: 5, jul: 6, july: 6,
-    aug: 7, august: 7, sep: 8, sept: 8, september: 8, oct: 9, october: 9,
+    aug: 7, august: 7, sep: 8, sept: 8, september: 8, oct: 9, octob: 9, october: 9,
     nov: 10, november: 10, dec: 11, december: 11
   };
 
   let month = monthMap[monthStr];
   if (month === undefined || isNaN(day)) return null;
 
-  let year = new Date().getFullYear();
+  let year = 2026; // Sheet date context
   return new Date(year, month, day, 12, 0, 0);
 }
 
@@ -274,9 +276,10 @@ function verifyUserAndLogin() {
     return;
   }
 
+  // Row 2 is the main Header Row
   currentHeaderRow = null;
   for(let i=0; i<parsedData.length; i++){
-    if(parsedData[i] && String(parsedData[i][1]).toLowerCase().includes("emp")){
+    if(parsedData[i] && String(parsedData[i][1]).toLowerCase().includes("emp id")){
       currentHeaderRow = parsedData[i];
       break;
     }
@@ -373,9 +376,6 @@ function renderSelectedMonthAttendance() {
 
   let tbodyHtml = "";
   let totalDays = 0, pCount = 0, nCount = 0, lCount = 0, hdCount = 0, aCount = 0;
-  
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
 
   dateColumnsInfo.forEach(item => {
     let d = item.dateObj;
@@ -393,8 +393,6 @@ function renderSelectedMonthAttendance() {
     }
 
     if(itemCycleMonth === targetMonth && itemCycleYear === targetYear) {
-      if(d > today) return;
-
       let statusVal = currentMatchedRow[item.colIndex] ? String(currentMatchedRow[item.colIndex]).trim() : "";
       let upperStatus = statusVal.toUpperCase();
 
